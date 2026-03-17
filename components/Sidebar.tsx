@@ -15,6 +15,7 @@ export interface SidebarProps {
   isMobileOpen?: boolean
   onMobileClose?: () => void
   isDesktopCollapsed?: boolean
+  isAdmin?: boolean
 }
 
 /**
@@ -40,6 +41,7 @@ export function Sidebar({
   isMobileOpen = false,
   onMobileClose,
   isDesktopCollapsed = false,
+  isAdmin = false,
 }: SidebarProps) {
   const [deletingFolderId, setDeletingFolderId] = React.useState<string | null>(null)
 
@@ -116,14 +118,16 @@ export function Sidebar({
 
         {/* Action Buttons */}
         <div className="p-4 space-y-2 border-b border-zinc-200">
-          <Button
-            onClick={handleUploadClickWithClose}
-            className="w-full justify-start"
-            variant="outline"
-          >
-            <Upload className="h-4 w-4 mr-2" />
-            Upload Tests
-          </Button>
+          {isAdmin && (
+            <Button
+              onClick={handleUploadClickWithClose}
+              className="w-full justify-start"
+              variant="outline"
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Upload Tests
+            </Button>
+          )}
 
           <Button
             onClick={handleErrorHubClickWithClose}
@@ -175,23 +179,25 @@ export function Sidebar({
                         <span className="truncate flex-1">{folder.name}</span>
                       </button>
 
-                      <button
-                        onClick={(e) => handleDeleteClick(e, folder.id)}
-                        disabled={isDeleting}
-                        className={`
-                          absolute right-2 top-1/2 -translate-y-1/2
-                          p-1 rounded opacity-0 group-hover:opacity-100
-                          transition-opacity duration-150
-                          ${isSelected
-                            ? 'hover:bg-zinc-800 text-white'
-                            : 'hover:bg-zinc-200 text-zinc-600'
-                          }
-                          disabled:opacity-50 disabled:cursor-not-allowed
-                        `}
-                        title="Delete folder"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={(e) => handleDeleteClick(e, folder.id)}
+                          disabled={isDeleting}
+                          className={`
+                            absolute right-2 top-1/2 -translate-y-1/2
+                            p-1 rounded opacity-0 group-hover:opacity-100
+                            transition-opacity duration-150
+                            ${isSelected
+                              ? 'hover:bg-zinc-800 text-white'
+                              : 'hover:bg-zinc-200 text-zinc-600'
+                            }
+                            disabled:opacity-50 disabled:cursor-not-allowed
+                          `}
+                          title="Delete folder"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
                   )
                 })}

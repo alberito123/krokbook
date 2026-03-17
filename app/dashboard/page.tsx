@@ -33,6 +33,20 @@ export default function DashboardPage() {
   const [testMode, setTestMode] = React.useState<TestMode>('study')
   const [currentQuestionIndex, setCurrentQuestionIndex] = React.useState(0)
 
+  // Admin auth state
+  const [isAdmin, setIsAdmin] = React.useState(false)
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = React.useState(false)
+  const [passwordInput, setPasswordInput] = React.useState('')
+  const [passwordError, setPasswordError] = React.useState(false)
+  const [isVerifying, setIsVerifying] = React.useState(false)
+
+  // Check sessionStorage for admin session on mount
+  React.useEffect(() => {
+    if (sessionStorage.getItem('isAdmin') === 'true') {
+      setIsAdmin(true)
+    }
+  }, [])
+
   // Mobile-specific state
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false)
   const [activeMobileTab, setActiveMobileTab] = React.useState<MobileTab>('tester')
@@ -125,8 +139,38 @@ export default function DashboardPage() {
   }, [store, selectedFolderId, router])
 
   const handleUploadClick = React.useCallback(() => {
-    setIsUploadModalOpen(true)
-  }, [])
+    if (isAdmin) {
+      setIsUploadModalOpen(true)
+    } else {
+      setPasswordError(false)
+      setPasswordInput('')
+      setIsPasswordModalOpen(true)
+    }
+  }, [isAdmin])
+
+  const handleVerifyPassword = React.useCallback(async () => {
+    setIsVerifying(true)
+    setPasswordError(false)
+    try {
+      const res = await fetch('/api/verify-admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: passwordInput }),
+      })
+      if (res.ok) {
+        sessionStorage.setItem('isAdmin', 'true')
+        setIsAdmin(true)
+        setIsPasswordModalOpen(false)
+        setIsUploadModalOpen(true)
+      } else {
+        setPasswordError(true)
+      }
+    } catch {
+      setPasswordError(true)
+    } finally {
+      setIsVerifying(false)
+    }
+  }, [passwordInput])
 
   const handleUploadComplete = React.useCallback((folderId?: string) => {
     setIsUploadModalOpen(false)
@@ -284,6 +328,7 @@ export default function DashboardPage() {
         isMobileOpen={isSidebarOpen}
         onMobileClose={handleSidebarClose}
         isDesktopCollapsed={isSidebarCollapsed}
+        isAdmin={isAdmin}
       />
 
       {/* Main Content Area */}
@@ -396,6 +441,47 @@ export default function DashboardPage() {
         folders={store.folders}
         onUploadComplete={handleUploadComplete}
       />
+
+      {/* Admin Password Modal */}
+      {isPasswordModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setIsPasswordModalOpen(false)}
+          />
+          <div className="relative bg-white rounded-lg shadow-xl p-6 w-80">
+            <h2 className="text-lg font-semibold text-zinc-900 mb-1">Admin Access</h2>
+            <p className="text-sm text-zinc-500 mb-4">Enter admin password to continue</p>
+            <input
+              type="password"
+              value={passwordInput}
+              onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(false) }}
+              onKeyDown={(e) => e.key === 'Enter' && handleVerifyPassword()}
+              placeholder="Password"
+              autoFocus
+              className="w-full h-10 px-3 rounded-md border border-zinc-200 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 mb-2"
+            />
+            {passwordError && (
+              <p className="text-sm text-red-600 mb-2">Incorrect password</p>
+            )}
+            <div className="flex gap-2 justify-end mt-3">
+              <button
+                onClick={() => setIsPasswordModalOpen(false)}
+                className="px-4 py-2 text-sm text-zinc-600 hover:text-zinc-900"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleVerifyPassword}
+                disabled={isVerifying || !passwordInput}
+                className="px-4 py-2 text-sm bg-zinc-900 text-white rounded-md hover:bg-zinc-700 disabled:opacity-50"
+              >
+                {isVerifying ? 'Checking...' : 'Enter'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
