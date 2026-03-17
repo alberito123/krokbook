@@ -118,16 +118,14 @@ export function Sidebar({
 
         {/* Action Buttons */}
         <div className="p-4 space-y-2 border-b border-zinc-200">
-          {isAdmin && (
-            <Button
-              onClick={handleUploadClickWithClose}
-              className="w-full justify-start"
-              variant="outline"
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              Upload Tests
-            </Button>
-          )}
+          <Button
+            onClick={handleUploadClickWithClose}
+            className="w-full justify-start"
+            variant="outline"
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            Upload Tests
+          </Button>
 
           <Button
             onClick={handleErrorHubClickWithClose}
