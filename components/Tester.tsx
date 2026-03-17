@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Search, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, BookOpen, Eye, RotateCcw, Check, X, PanelLeft, PanelRight } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, BookOpen, Eye, RotateCcw, Check, X, PanelLeft, PanelRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { Question, FolderProgress, TestMode } from '@/lib/types'
@@ -21,6 +21,7 @@ export interface TesterProps {
   isNotebookCollapsed?: boolean
   onToggleSidebar?: () => void
   onToggleNotebook?: () => void
+  isHeaderCollapsed?: boolean
 }
 
 /**
@@ -52,43 +53,16 @@ export function Tester({
   isNotebookCollapsed = false,
   onToggleSidebar,
   onToggleNotebook,
+  isHeaderCollapsed = false,
 }: TesterProps) {
   const [searchQuery, setSearchQuery] = React.useState('')
   const [filteredQuestions, setFilteredQuestions] = React.useState(questions)
-  const [isHeaderCollapsed, setIsHeaderCollapsed] = React.useState(false)
   const [fontSize, setFontSize] = React.useState<number>(() => {
     if (typeof window === 'undefined') return FONT_SIZE_DEFAULT
     const saved = localStorage.getItem(FONT_SIZE_KEY)
     const parsed = saved ? parseInt(saved, 10) : NaN
     return isNaN(parsed) ? FONT_SIZE_DEFAULT : Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, parsed))
   })
-
-  // Restore header collapsed state from localStorage on mount
-  React.useEffect(() => {
-    try {
-      const savedState = localStorage.getItem('panelVisibility')
-      if (savedState) {
-        const saved = JSON.parse(savedState)
-        if (saved.headerCollapsed !== undefined) setIsHeaderCollapsed(saved.headerCollapsed)
-      }
-    } catch (e) {
-      console.warn('Failed to load header collapsed state:', e)
-    }
-  }, [])
-
-  // Save header collapsed state to localStorage when changed
-  React.useEffect(() => {
-    try {
-      const existing = localStorage.getItem('panelVisibility')
-      const parsed = existing ? JSON.parse(existing) : {}
-      localStorage.setItem('panelVisibility', JSON.stringify({
-        ...parsed,
-        headerCollapsed: isHeaderCollapsed
-      }))
-    } catch (e) {
-      console.warn('Failed to save header collapsed state:', e)
-    }
-  }, [isHeaderCollapsed])
 
   const changeFontSize = (delta: number) => {
     setFontSize(prev => {
@@ -183,7 +157,7 @@ export function Tester({
                 <PanelLeft className={`h-5 w-5 ${isSidebarCollapsed ? 'text-zinc-400' : 'text-zinc-700'}`} />
               </Button>
             )}
-            <h2 className="text-xl font-bold md:text-2xl text-zinc-900">Tester</h2>
+            <h2 className="hidden md:block text-2xl font-bold text-zinc-900">Tester</h2>
           </div>
 
           {/* Mode Toggle & Reset & Font Size & Notebook Toggle */}
@@ -247,14 +221,6 @@ export function Tester({
                 <PanelRight className={`h-5 w-5 ${isNotebookCollapsed ? 'text-zinc-400' : 'text-zinc-700'}`} />
               </Button>
             )}
-            {/* Header collapse toggle - mobile only */}
-            <button
-              onClick={() => setIsHeaderCollapsed(!isHeaderCollapsed)}
-              className="md:hidden p-1.5 rounded-md hover:bg-zinc-100 transition-colors flex-shrink-0"
-              aria-label={isHeaderCollapsed ? "Expand controls" : "Collapse controls"}
-            >
-              {isHeaderCollapsed ? <ChevronDown className="w-4 h-4 text-zinc-500" /> : <ChevronUp className="w-4 h-4 text-zinc-500" />}
-            </button>
           </div>
         </div>
 

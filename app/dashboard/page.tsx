@@ -54,15 +54,17 @@ export default function DashboardPage() {
   // Panel visibility state (desktop only)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(false)
   const [isNotebookCollapsed, setIsNotebookCollapsed] = React.useState(false)
+  const [isHeaderCollapsed, setIsHeaderCollapsed] = React.useState(false)
 
   // Load panel visibility from localStorage on mount
   React.useEffect(() => {
     try {
       const savedState = localStorage.getItem('panelVisibility')
       if (savedState) {
-        const { sidebar, notebook } = JSON.parse(savedState)
+        const { sidebar, notebook, headerCollapsed } = JSON.parse(savedState)
         setIsSidebarCollapsed(sidebar ?? false)
         setIsNotebookCollapsed(notebook ?? false)
+        setIsHeaderCollapsed(headerCollapsed ?? false)
       }
     } catch (e) {
       // Ignore localStorage errors (e.g., SSR, private browsing)
@@ -75,12 +77,13 @@ export default function DashboardPage() {
     try {
       localStorage.setItem('panelVisibility', JSON.stringify({
         sidebar: isSidebarCollapsed,
-        notebook: isNotebookCollapsed
+        notebook: isNotebookCollapsed,
+        headerCollapsed: isHeaderCollapsed,
       }))
     } catch (e) {
       console.warn('Failed to save panel visibility state:', e)
     }
-  }, [isSidebarCollapsed, isNotebookCollapsed])
+  }, [isSidebarCollapsed, isNotebookCollapsed, isHeaderCollapsed])
 
   // Get current folder name for mobile header
   const currentFolderName = React.useMemo(() => {
@@ -315,6 +318,8 @@ export default function DashboardPage() {
         folderName={currentFolderName}
         onMenuClick={handleMenuToggle}
         isSidebarOpen={isSidebarOpen}
+        isHeaderCollapsed={isHeaderCollapsed}
+        onToggleHeader={() => setIsHeaderCollapsed(prev => !prev)}
       />
 
       {/* Sidebar - drawer on mobile, static on desktop (collapsible) */}
@@ -392,6 +397,7 @@ export default function DashboardPage() {
               isNotebookCollapsed={isNotebookCollapsed}
               onToggleSidebar={handleToggleSidebar}
               onToggleNotebook={handleToggleNotebook}
+              isHeaderCollapsed={isHeaderCollapsed}
             />
           )}
         </div>

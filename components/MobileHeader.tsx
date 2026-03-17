@@ -1,13 +1,15 @@
 'use client'
 
 import * as React from 'react'
-import { Menu, X } from 'lucide-react'
+import { Menu, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 interface MobileHeaderProps {
     folderName?: string
     onMenuClick: () => void
     isSidebarOpen: boolean
+    isHeaderCollapsed?: boolean
+    onToggleHeader?: () => void
 }
 
 /**
@@ -20,6 +22,8 @@ export function MobileHeader({
     folderName,
     onMenuClick,
     isSidebarOpen,
+    isHeaderCollapsed,
+    onToggleHeader,
 }: MobileHeaderProps) {
     return (
         <header className="md:hidden fixed top-0 left-0 right-0 z-40 bg-white border-b border-zinc-200">
@@ -47,6 +51,21 @@ export function MobileHeader({
                         )}
                     </div>
                 </div>
+                {onToggleHeader && (
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={onToggleHeader}
+                        className="p-2 -mr-2"
+                        aria-label={isHeaderCollapsed ? 'Show controls' : 'Hide controls'}
+                    >
+                        {isHeaderCollapsed ? (
+                            <ChevronDown className="h-5 w-5 text-zinc-500" />
+                        ) : (
+                            <ChevronUp className="h-5 w-5 text-zinc-500" />
+                        )}
+                    </Button>
+                )}
             </div>
         </header>
     )
