@@ -33,6 +33,7 @@ export function setToStorage<T>(key: string, value: T): void {
     if (typeof window === 'undefined') return
     try {
         localStorage.setItem(key, JSON.stringify(value))
+        window.dispatchEvent(new Event('krokbook-storage-changed'))
     } catch (error) {
         console.error('Failed to save to localStorage:', error)
     }
@@ -46,6 +47,7 @@ export function removeFromStorage(key: string): void {
     if (typeof window === 'undefined') return
     try {
         localStorage.removeItem(key)
+        window.dispatchEvent(new Event('krokbook-storage-changed'))
     } catch (error) {
         console.error('Failed to remove from localStorage:', error)
     }

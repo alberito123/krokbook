@@ -5,6 +5,40 @@ import { Upload, AlertCircle, FolderOpen, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { Folder } from '@/lib/types'
 
+const LS_LIMIT_BYTES = 5 * 1024 * 1024 // 5 MB
+
+function useLocalStorageSize() {
+  const measure = () => {
+    if (typeof window === 'undefined') return 0
+    let total = 0
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i) ?? ''
+      const value = localStorage.getItem(key) ?? ''
+      total += (key.length + value.length) * 2
+    }
+    return total
+  }
+
+  const [usedBytes, setUsedBytes] = React.useState(0)
+
+  React.useEffect(() => {
+    setUsedBytes(measure())
+    const handler = () => setUsedBytes(measure())
+    window.addEventListener('krokbook-storage-changed', handler)
+    window.addEventListener('storage', handler)
+    return () => {
+      window.removeEventListener('krokbook-storage-changed', handler)
+      window.removeEventListener('storage', handler)
+    }
+  }, [])
+
+  const percent = Math.min(100, (usedBytes / LS_LIMIT_BYTES) * 100)
+  const usedMB = (usedBytes / (1024 * 1024)).toFixed(2)
+  const status = percent > 80 ? 'danger' : percent > 55 ? 'warning' : 'ok'
+
+  return { usedMB, percent, status }
+}
+
 export interface SidebarProps {
   folders: Folder[]
   selectedFolderId: string | null
@@ -44,6 +78,7 @@ export function Sidebar({
   isAdmin = false,
 }: SidebarProps) {
   const [deletingFolderId, setDeletingFolderId] = React.useState<string | null>(null)
+  const { usedMB, percent, status } = useLocalStorageSize()
 
   const handleDeleteClick = async (e: React.MouseEvent, folderId: string) => {
     e.stopPropagation()
@@ -205,10 +240,37 @@ export function Sidebar({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-zinc-200">
+        <div className="p-4 border-t border-zinc-200 space-y-3">
           <p className="text-xs text-zinc-500 text-center">
             {folders.length} {folders.length === 1 ? 'folder' : 'folders'}
           </p>
+          <div>
+            <div className="flex justify-between text-xs mb-1">
+              <span className="text-zinc-500">Local storage</span>
+              <span className={
+                status === 'danger' ? 'text-red-600 font-medium' :
+                status === 'warning' ? 'text-amber-600 font-medium' :
+                'text-zinc-500'
+              }>
+                {usedMB} / 5 MB
+              </span>
+            </div>
+            <div className="h-1.5 bg-zinc-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  status === 'danger' ? 'bg-red-500' :
+                  status === 'warning' ? 'bg-amber-400' :
+                  'bg-green-500'
+                }`}
+                style={{ width: `${percent}%` }}
+              />
+            </div>
+            {status === 'danger' && (
+              <p className="text-xs text-red-600 mt-1">
+                Storage almost full — notes may not save
+              </p>
+            )}
+          </div>
         </div>
       </aside>
     </>
