@@ -1,0 +1,5 @@
+export { Button, type ButtonProps } from './button'
+export { Input, type InputProps } from './input'
+export { Label, type LabelProps } from './label'
+export { Tabs, TabsList, TabsTrigger, TabsContent } from './tabs'
+export { Textarea, type TextareaProps } from './textarea'
