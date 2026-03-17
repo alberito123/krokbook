@@ -32,6 +32,12 @@ export interface TesterProps {
  * - Study/Review mode toggle
  * - Search functionality
  */
+const FONT_SIZE_KEY = 'krokbook-tester-font-size'
+const FONT_SIZE_MIN = 12
+const FONT_SIZE_MAX = 26
+const FONT_SIZE_STEP = 2
+const FONT_SIZE_DEFAULT = 16
+
 export function Tester({
   questions,
   progress,
@@ -49,6 +55,20 @@ export function Tester({
 }: TesterProps) {
   const [searchQuery, setSearchQuery] = React.useState('')
   const [filteredQuestions, setFilteredQuestions] = React.useState(questions)
+  const [fontSize, setFontSize] = React.useState<number>(() => {
+    if (typeof window === 'undefined') return FONT_SIZE_DEFAULT
+    const saved = localStorage.getItem(FONT_SIZE_KEY)
+    const parsed = saved ? parseInt(saved, 10) : NaN
+    return isNaN(parsed) ? FONT_SIZE_DEFAULT : Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, parsed))
+  })
+
+  const changeFontSize = (delta: number) => {
+    setFontSize(prev => {
+      const next = Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, prev + delta))
+      localStorage.setItem(FONT_SIZE_KEY, String(next))
+      return next
+    })
+  }
 
   // Filter questions based on search
   React.useEffect(() => {
@@ -138,7 +158,7 @@ export function Tester({
             <h2 className="text-2xl font-bold text-zinc-900">Tester</h2>
           </div>
 
-          {/* Mode Toggle & Reset & Notebook Toggle */}
+          {/* Mode Toggle & Reset & Font Size & Notebook Toggle */}
           <div className="flex items-center gap-2">
             <Button
               variant={mode === 'study' ? 'default' : 'outline'}
@@ -167,6 +187,26 @@ export function Tester({
             >
               <RotateCcw className="h-4 w-4" />
             </Button>
+            {/* Font size controls */}
+            <div className="flex items-center gap-1 border border-zinc-200 rounded-md px-1">
+              <button
+                onClick={() => changeFontSize(-FONT_SIZE_STEP)}
+                disabled={fontSize <= FONT_SIZE_MIN}
+                className="px-1.5 py-0.5 text-sm font-bold text-zinc-600 hover:text-zinc-900 disabled:opacity-30 disabled:cursor-not-allowed"
+                title="Decrease font size"
+              >
+                A-
+              </button>
+              <span className="text-xs text-zinc-400 select-none">{fontSize}</span>
+              <button
+                onClick={() => changeFontSize(FONT_SIZE_STEP)}
+                disabled={fontSize >= FONT_SIZE_MAX}
+                className="px-1.5 py-0.5 text-sm font-bold text-zinc-600 hover:text-zinc-900 disabled:opacity-30 disabled:cursor-not-allowed"
+                title="Increase font size"
+              >
+                A+
+              </button>
+            </div>
             {/* Notebook Toggle - hidden on mobile */}
             {onToggleNotebook && (
               <Button
@@ -283,7 +323,7 @@ export function Tester({
           <div className="space-y-6">
             {/* Question Text */}
             <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-6">
-              <p className="text-lg text-zinc-900 leading-relaxed">
+              <p className="text-zinc-900 leading-relaxed" style={{ fontSize: `${fontSize}px` }}>
                 {currentQuestion.questionText}
               </p>
             </div>
@@ -319,7 +359,7 @@ export function Tester({
                       ${mode === 'review' || isAnswered ? 'cursor-default' : 'cursor-pointer active:opacity-80'}
                     `}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3" style={{ fontSize: `${fontSize}px` }}>
                       <span className="flex-shrink-0 w-6 h-6 rounded-full bg-zinc-100 flex items-center justify-center font-semibold text-sm">
                         {String.fromCharCode(65 + index)}
                       </span>
