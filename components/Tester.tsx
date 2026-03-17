@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Search, ChevronLeft, ChevronRight, BookOpen, Eye, RotateCcw, Check, X, PanelLeft, PanelRight } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, BookOpen, Eye, RotateCcw, Check, X, PanelLeft, PanelRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { Question, FolderProgress, TestMode } from '@/lib/types'
@@ -55,12 +55,40 @@ export function Tester({
 }: TesterProps) {
   const [searchQuery, setSearchQuery] = React.useState('')
   const [filteredQuestions, setFilteredQuestions] = React.useState(questions)
+  const [isHeaderCollapsed, setIsHeaderCollapsed] = React.useState(false)
   const [fontSize, setFontSize] = React.useState<number>(() => {
     if (typeof window === 'undefined') return FONT_SIZE_DEFAULT
     const saved = localStorage.getItem(FONT_SIZE_KEY)
     const parsed = saved ? parseInt(saved, 10) : NaN
     return isNaN(parsed) ? FONT_SIZE_DEFAULT : Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, parsed))
   })
+
+  // Restore header collapsed state from localStorage on mount
+  React.useEffect(() => {
+    try {
+      const savedState = localStorage.getItem('panelVisibility')
+      if (savedState) {
+        const saved = JSON.parse(savedState)
+        if (saved.headerCollapsed !== undefined) setIsHeaderCollapsed(saved.headerCollapsed)
+      }
+    } catch (e) {
+      console.warn('Failed to load header collapsed state:', e)
+    }
+  }, [])
+
+  // Save header collapsed state to localStorage when changed
+  React.useEffect(() => {
+    try {
+      const existing = localStorage.getItem('panelVisibility')
+      const parsed = existing ? JSON.parse(existing) : {}
+      localStorage.setItem('panelVisibility', JSON.stringify({
+        ...parsed,
+        headerCollapsed: isHeaderCollapsed
+      }))
+    } catch (e) {
+      console.warn('Failed to save header collapsed state:', e)
+    }
+  }, [isHeaderCollapsed])
 
   const changeFontSize = (delta: number) => {
     setFontSize(prev => {
@@ -155,7 +183,7 @@ export function Tester({
                 <PanelLeft className={`h-5 w-5 ${isSidebarCollapsed ? 'text-zinc-400' : 'text-zinc-700'}`} />
               </Button>
             )}
-            <h2 className="text-2xl font-bold text-zinc-900">Tester</h2>
+            <h2 className="text-xl font-bold md:text-2xl text-zinc-900">Tester</h2>
           </div>
 
           {/* Mode Toggle & Reset & Font Size & Notebook Toggle */}
@@ -219,88 +247,99 @@ export function Tester({
                 <PanelRight className={`h-5 w-5 ${isNotebookCollapsed ? 'text-zinc-400' : 'text-zinc-700'}`} />
               </Button>
             )}
+            {/* Header collapse toggle - mobile only */}
+            <button
+              onClick={() => setIsHeaderCollapsed(!isHeaderCollapsed)}
+              className="md:hidden p-1.5 rounded-md hover:bg-zinc-100 transition-colors flex-shrink-0"
+              aria-label={isHeaderCollapsed ? "Expand controls" : "Collapse controls"}
+            >
+              {isHeaderCollapsed ? <ChevronDown className="w-4 h-4 text-zinc-500" /> : <ChevronUp className="w-4 h-4 text-zinc-500" />}
+            </button>
           </div>
         </div>
 
-        {/* Question Indicators */}
-        <div className="flex flex-wrap gap-1 mb-4 max-h-24 overflow-y-auto">
-          {filteredQuestions.map((question, index) => {
-            const qProgress = progress.questionProgress[question.id]
-            const status = qProgress?.status || 'unanswered'
-            const isActive = index === currentQuestionIndex
+        {/* Collapsible section - hidden on mobile when collapsed, always visible on desktop */}
+        <div className={`md:block ${isHeaderCollapsed ? 'hidden' : 'block'}`}>
+          {/* Question Indicators */}
+          <div className="flex flex-wrap gap-1 mb-4 max-h-24 overflow-y-auto">
+            {filteredQuestions.map((question, index) => {
+              const qProgress = progress.questionProgress[question.id]
+              const status = qProgress?.status || 'unanswered'
+              const isActive = index === currentQuestionIndex
 
-            // Determine button styles based on status and active state
-            let buttonClasses = 'w-8 h-8 rounded text-xs font-medium'
+              // Determine button styles based on status and active state
+              let buttonClasses = 'w-8 h-8 rounded text-xs font-medium'
 
-            if (status === 'correct') {
-              // Green - use darker shade when active
-              if (isActive) {
-                buttonClasses += ' bg-green-600 text-white'
+              if (status === 'correct') {
+                // Green - use darker shade when active
+                if (isActive) {
+                  buttonClasses += ' bg-green-600 text-white'
+                } else {
+                  buttonClasses += ' bg-green-500 text-white hover:bg-green-600'
+                }
+              } else if (status === 'incorrect') {
+                // Red - use darker shade when active
+                if (isActive) {
+                  buttonClasses += ' bg-red-600 text-white'
+                } else {
+                  buttonClasses += ' bg-red-500 text-white hover:bg-red-600'
+                }
               } else {
-                buttonClasses += ' bg-green-500 text-white hover:bg-green-600'
+                // Unanswered - apply yellow for active
+                if (isActive) {
+                  buttonClasses += ' bg-amber-100 text-amber-900 border-2 border-amber-400'
+                } else {
+                  buttonClasses += ' bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                }
               }
-            } else if (status === 'incorrect') {
-              // Red - use darker shade when active
-              if (isActive) {
-                buttonClasses += ' bg-red-600 text-white'
-              } else {
-                buttonClasses += ' bg-red-500 text-white hover:bg-red-600'
-              }
-            } else {
-              // Unanswered - apply yellow for active
-              if (isActive) {
-                buttonClasses += ' bg-amber-100 text-amber-900 border-2 border-amber-400'
-              } else {
-                buttonClasses += ' bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
-              }
-            }
 
-            return (
+              return (
+                <button
+                  key={question.id}
+                  onClick={() => onQuestionSelect(index)}
+                  className={buttonClasses}
+                >
+                  {index + 1}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+            <Input
+              type="text"
+              placeholder="Search questions..."
+              value={searchQuery}
+              onChange={handleSearchChange}
+              className="pl-10 pr-20"
+            />
+            {searchQuery && (
               <button
-                key={question.id}
-                onClick={() => onQuestionSelect(index)}
-                className={buttonClasses}
+                onClick={handleClearSearch}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500 hover:text-zinc-700"
               >
-                {index + 1}
+                Clear
               </button>
-            )
-          })}
-        </div>
+            )}
+          </div>
 
-        {/* Search Bar */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-          <Input
-            type="text"
-            placeholder="Search questions..."
-            value={searchQuery}
-            onChange={handleSearchChange}
-            className="pl-10 pr-20"
-          />
-          {searchQuery && (
-            <button
-              onClick={handleClearSearch}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500 hover:text-zinc-700"
-            >
-              Clear
-            </button>
-          )}
-        </div>
-
-        {/* Question Counter */}
-        <div className="mt-3 text-sm text-zinc-600">
-          {filteredQuestions.length > 0 ? (
-            <>
-              Question {currentQuestionIndex + 1} of {filteredQuestions.length}
-              {searchQuery && (
-                <span className="text-zinc-500 ml-2">
-                  (filtered from {questions.length})
-                </span>
-              )}
-            </>
-          ) : (
-            <span className="text-zinc-500">No questions found</span>
-          )}
+          {/* Question Counter */}
+          <div className="mt-3 text-sm text-zinc-600">
+            {filteredQuestions.length > 0 ? (
+              <>
+                Question {currentQuestionIndex + 1} of {filteredQuestions.length}
+                {searchQuery && (
+                  <span className="text-zinc-500 ml-2">
+                    (filtered from {questions.length})
+                  </span>
+                )}
+              </>
+            ) : (
+              <span className="text-zinc-500">No questions found</span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -322,7 +361,7 @@ export function Tester({
         ) : shuffled && (
           <div className="space-y-6">
             {/* Question Text */}
-            <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-6">
+            <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-4 md:p-6">
               <p className="text-zinc-900 leading-relaxed" style={{ fontSize: `${fontSize}px` }}>
                 {currentQuestion.questionText}
               </p>
@@ -354,7 +393,7 @@ export function Tester({
                     onClick={() => handleAnswerClick(index)}
                     disabled={mode === 'review' || isAnswered}
                     className={`
-                      w-full text-left p-4 rounded-lg border-2 transition-colors
+                      w-full text-left p-3 md:p-4 rounded-lg border-2 transition-colors
                       ${buttonStyle}
                       ${mode === 'review' || isAnswered ? 'cursor-default' : 'cursor-pointer active:opacity-80'}
                     `}
