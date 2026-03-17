@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@radix-ui/react-tabs": "^1.1.13",
+    "@supabase/supabase-js": "^2.99.2",
     "@tiptap/extension-placeholder": "^2.1.13",
     "@tiptap/extension-typography": "^2.1.13",
     "@tiptap/pm": "^2.1.13",

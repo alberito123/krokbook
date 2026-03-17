@@ -200,16 +200,16 @@ export function UploadModal({
       let targetFolderId: string
 
       if (folderMode === 'new') {
-        // Create new folder
-        const newFolder = store.addFolder(folderName.trim())
+        // Create new folder in Supabase
+        const newFolder = await store.addFolder(folderName.trim())
         targetFolderId = newFolder.id
       } else {
         // Use existing folder
         targetFolderId = selectedFolderId
       }
 
-      // Add questions
-      store.addQuestions(targetFolderId, validQuestions)
+      // Add questions to Supabase
+      await store.addQuestions(targetFolderId, validQuestions)
 
       onUploadComplete(targetFolderId)
     } catch (err) {

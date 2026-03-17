@@ -14,6 +14,7 @@ import type {
 import { generateId, getFromStorage, setToStorage, removeFromStorage } from './storage'
 import { shuffleArray } from './utils'
 import { STORAGE_KEYS } from './constants'
+import { supabase } from './supabase'
 
 
 // ============ Context ============
@@ -23,36 +24,37 @@ interface StoreContextValue {
     folders: Folder[]
     isLoading: boolean
 
-    // Folder operations
-    addFolder: (name: string) => Folder
-    deleteFolder: (folderId: string) => void
-    refreshFolders: () => void
+    // Folder operations (async — saved to Supabase)
+    addFolder: (name: string) => Promise<Folder>
+    deleteFolder: (folderId: string) => Promise<void>
+    refreshFolders: () => Promise<void>
 
     // Question operations
+    loadQuestionsForFolder: (folderId: string) => Promise<Question[]>
     getQuestions: (folderId: string) => Question[]
-    addQuestions: (folderId: string, questions: ParsedQuestion[]) => void
+    addQuestions: (folderId: string, questions: ParsedQuestion[]) => Promise<void>
 
-    // Error operations
+    // Error operations (localStorage — per-user)
     getErrors: (folderId: string) => UserError[]
     addError: (folderId: string, questionId: string, selectedIndex: number) => UserError
     updateErrorNotes: (errorId: string, notes: string) => void
     getAllErrors: () => UserError[]
     getErrorQuestions: () => QuestionWithError[]
 
-    // Notebook operations
+    // Notebook operations (localStorage — per-user)
     getNotebookContent: (folderId: string) => string
     saveNotebookContent: (folderId: string, content: string) => void
 
-    // Progress operations
-    getProgress: (folderId: string) => FolderProgress
+    // Progress operations (localStorage — per-user)
+    getProgress: (folderId: string, questions?: Question[]) => FolderProgress
     updateProgress: (folderId: string, questionId: string, status: 'correct' | 'incorrect', selectedIndex: number) => void
     resetProgress: (folderId: string) => FolderProgress
 
-    // Current state operations (for persistence)
+    // Current state operations (localStorage — per-user)
     getCurrentState: (folderId: string) => { questionIndex: number; testMode: 'study' | 'review' }
     saveCurrentState: (folderId: string, questionIndex: number, testMode: 'study' | 'review') => void
 
-    // Folder notes operations
+    // Folder notes operations (localStorage — per-user)
     getFolderNotes: (folderId: string) => FolderNote[]
     addFolderNote: (folderId: string, text: string) => FolderNote
     updateFolderNote: (folderId: string, noteId: string, text: string) => void
@@ -69,46 +71,91 @@ const StoreContext = React.createContext<StoreContextValue | null>(null)
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
     const [folders, setFolders] = React.useState<Folder[]>([])
+    const [questionsByFolder, setQuestionsByFolder] = React.useState<Record<string, Question[]>>({})
     const [isLoading, setIsLoading] = React.useState(true)
 
-    // Load folders on mount
+    // Load folders from Supabase on mount
     React.useEffect(() => {
-        const loadedFolders = getFromStorage<Folder[]>(STORAGE_KEYS.FOLDERS, [])
-        setFolders(loadedFolders)
-        setIsLoading(false)
+        const loadFolders = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('folders')
+                    .select('*')
+                    .order('created_at', { ascending: true })
+
+                if (error) throw error
+
+                setFolders(data.map(f => ({
+                    id: f.id as string,
+                    name: f.name as string,
+                    createdAt: f.created_at as string,
+                })))
+            } catch (err) {
+                console.error('Failed to load folders from Supabase:', err)
+            } finally {
+                setIsLoading(false)
+            }
+        }
+
+        loadFolders()
     }, [])
 
-    const refreshFolders = React.useCallback(() => {
-        const loadedFolders = getFromStorage<Folder[]>(STORAGE_KEYS.FOLDERS, [])
-        setFolders(loadedFolders)
+    const refreshFolders = React.useCallback(async () => {
+        try {
+            const { data, error } = await supabase
+                .from('folders')
+                .select('*')
+                .order('created_at', { ascending: true })
+
+            if (error) throw error
+
+            setFolders(data.map(f => ({
+                id: f.id as string,
+                name: f.name as string,
+                createdAt: f.created_at as string,
+            })))
+        } catch (err) {
+            console.error('Failed to refresh folders:', err)
+        }
     }, [])
 
     // ========== Folder Operations ==========
 
-    const addFolder = React.useCallback((name: string): Folder => {
-        const newFolder: Folder = {
-            id: generateId(),
-            name,
-            createdAt: new Date().toISOString(),
+    const addFolder = React.useCallback(async (name: string): Promise<Folder> => {
+        const { data, error } = await supabase
+            .from('folders')
+            .insert({ name })
+            .select()
+            .single()
+
+        if (error) throw error
+
+        const folder: Folder = {
+            id: data.id as string,
+            name: data.name as string,
+            createdAt: data.created_at as string,
         }
 
-        const updatedFolders = [...folders, newFolder]
-        setToStorage(STORAGE_KEYS.FOLDERS, updatedFolders)
-        setFolders(updatedFolders)
+        setFolders(prev => [...prev, folder])
+        return folder
+    }, [])
 
-        return newFolder
-    }, [folders])
+    const deleteFolder = React.useCallback(async (folderId: string): Promise<void> => {
+        const { error } = await supabase
+            .from('folders')
+            .delete()
+            .eq('id', folderId)
 
-    const deleteFolder = React.useCallback((folderId: string): void => {
-        // Remove folder using functional update to avoid stale closure
-        setFolders(prevFolders => {
-            const updatedFolders = prevFolders.filter(f => f.id !== folderId)
-            setToStorage(STORAGE_KEYS.FOLDERS, updatedFolders)
-            return updatedFolders
+        if (error) throw error
+
+        setFolders(prev => prev.filter(f => f.id !== folderId))
+        setQuestionsByFolder(prev => {
+            const next = { ...prev }
+            delete next[folderId]
+            return next
         })
 
-        // Clean up related data
-        removeFromStorage(STORAGE_KEYS.QUESTIONS(folderId))
+        // Clean up user-specific localStorage data for this folder
         removeFromStorage(STORAGE_KEYS.ERRORS(folderId))
         removeFromStorage(STORAGE_KEYS.NOTEBOOK(folderId))
         removeFromStorage(STORAGE_KEYS.PROGRESS(folderId))
@@ -118,43 +165,71 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
     // ========== Question Operations ==========
 
-    const getQuestions = React.useCallback((folderId: string): Question[] => {
-        return getFromStorage<Question[]>(STORAGE_KEYS.QUESTIONS(folderId), [])
-    }, [])
+    const loadQuestionsForFolder = React.useCallback(async (folderId: string): Promise<Question[]> => {
+        try {
+            const { data, error } = await supabase
+                .from('questions')
+                .select('*')
+                .eq('folder_id', folderId)
+                .order('created_at', { ascending: true })
 
-    const addQuestions = React.useCallback((folderId: string, parsedQuestions: ParsedQuestion[]): void => {
-        const existingQuestions = getFromStorage<Question[]>(STORAGE_KEYS.QUESTIONS(folderId), [])
+            if (error) throw error
 
-        const newQuestions: Question[] = parsedQuestions
-            .filter(pq => pq.isValid)
-            .map(pq => ({
-                id: generateId(),
-                folderId,
-                questionText: pq.questionText,
-                answerOptions: pq.answerOptions,
-                correctAnswerIndex: pq.correctAnswerIndex,
-                sourceFile: pq.sourceFile,
+            const questions: Question[] = data.map(q => ({
+                id: q.id as string,
+                folderId: q.folder_id as string,
+                questionText: q.question_text as string,
+                answerOptions: q.answer_options as string[],
+                correctAnswerIndex: q.correct_answer_index as number,
+                sourceFile: (q.source_file as string) || undefined,
             }))
 
-        const allQuestions = [...existingQuestions, ...newQuestions]
-        setToStorage(STORAGE_KEYS.QUESTIONS(folderId), allQuestions)
-
-        // Update progress for new questions (if progress already exists)
-        const existingProgress = getFromStorage<FolderProgress | null>(STORAGE_KEYS.PROGRESS(folderId), null)
-        if (existingProgress && newQuestions.length > 0) {
-            for (const question of newQuestions) {
-                const { indices } = shuffleArray(question.answerOptions)
-                existingProgress.shuffledAnswers[question.id] = indices
-                existingProgress.questionProgress[question.id] = {
-                    questionId: question.id,
-                    status: 'unanswered',
-                }
-            }
-            setToStorage(STORAGE_KEYS.PROGRESS(folderId), existingProgress)
+            setQuestionsByFolder(prev => ({ ...prev, [folderId]: questions }))
+            return questions
+        } catch (err) {
+            console.error('Failed to load questions:', err)
+            return []
         }
     }, [])
 
-    // ========== Error Operations ==========
+    const getQuestions = React.useCallback((folderId: string): Question[] => {
+        return questionsByFolder[folderId] || []
+    }, [questionsByFolder])
+
+    const addQuestions = React.useCallback(async (folderId: string, parsedQuestions: ParsedQuestion[]): Promise<void> => {
+        const rows = parsedQuestions
+            .filter(pq => pq.isValid)
+            .map(pq => ({
+                folder_id: folderId,
+                question_text: pq.questionText,
+                answer_options: pq.answerOptions,
+                correct_answer_index: pq.correctAnswerIndex,
+                source_file: pq.sourceFile || null,
+            }))
+
+        const { data, error } = await supabase
+            .from('questions')
+            .insert(rows)
+            .select()
+
+        if (error) throw error
+
+        const newQuestions: Question[] = data.map(q => ({
+            id: q.id as string,
+            folderId: q.folder_id as string,
+            questionText: q.question_text as string,
+            answerOptions: q.answer_options as string[],
+            correctAnswerIndex: q.correct_answer_index as number,
+            sourceFile: (q.source_file as string) || undefined,
+        }))
+
+        setQuestionsByFolder(prev => ({
+            ...prev,
+            [folderId]: [...(prev[folderId] || []), ...newQuestions],
+        }))
+    }, [])
+
+    // ========== Error Operations (localStorage — per-user) ==========
 
     const getErrors = React.useCallback((folderId: string): UserError[] => {
         return getFromStorage<UserError[]>(STORAGE_KEYS.ERRORS(folderId), [])
@@ -163,10 +238,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const addError = React.useCallback((folderId: string, questionId: string, selectedIndex: number): UserError => {
         const errors = getFromStorage<UserError[]>(STORAGE_KEYS.ERRORS(folderId), [])
 
-        // Check if error already exists for this question
         const existingError = errors.find(e => e.questionId === questionId)
         if (existingError) {
-            // Update existing error with new selected index, mark as not resolved
             existingError.userSelectedIndex = selectedIndex
             existingError.createdAt = new Date().toISOString()
             existingError.isResolved = false
@@ -191,7 +264,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }, [])
 
     const updateErrorNotes = React.useCallback((errorId: string, notes: string): void => {
-        // Find which folder this error belongs to
         for (const folder of folders) {
             const errors = getFromStorage<UserError[]>(STORAGE_KEYS.ERRORS(folder.id), [])
             const errorIndex = errors.findIndex(e => e.id === errorId)
@@ -217,11 +289,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         const result: QuestionWithError[] = []
 
         for (const folder of folders) {
-            const questions = getFromStorage<Question[]>(STORAGE_KEYS.QUESTIONS(folder.id), [])
+            const questions = questionsByFolder[folder.id] || []
             const errors = getFromStorage<UserError[]>(STORAGE_KEYS.ERRORS(folder.id), [])
 
             for (const error of errors) {
-                // Skip resolved errors
                 if (error.isResolved) continue
 
                 const question = questions.find(q => q.id === error.questionId)
@@ -232,9 +303,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         }
 
         return result
-    }, [folders])
+    }, [folders, questionsByFolder])
 
-    // ========== Notebook Operations ==========
+    // ========== Notebook Operations (localStorage — per-user) ==========
 
     const getNotebookContent = React.useCallback((folderId: string): string => {
         return getFromStorage<string>(STORAGE_KEYS.NOTEBOOK(folderId), '')
@@ -244,7 +315,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setToStorage(STORAGE_KEYS.NOTEBOOK(folderId), content)
     }, [])
 
-    // ========== Folder Notes Operations ==========
+    // ========== Folder Notes Operations (localStorage — per-user) ==========
 
     const getFolderNotes = React.useCallback((folderId: string): FolderNote[] => {
         return getFromStorage<FolderNote[]>(STORAGE_KEYS.FOLDER_NOTES(folderId), [])
@@ -296,21 +367,21 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         }
     }, [])
 
-    // ========== Progress Operations ==========
+    // ========== Progress Operations (localStorage — per-user) ==========
 
-    const getProgress = React.useCallback((folderId: string): FolderProgress => {
+    const getProgress = React.useCallback((folderId: string, questions?: Question[]): FolderProgress => {
         const existing = getFromStorage<FolderProgress | null>(STORAGE_KEYS.PROGRESS(folderId), null)
 
         if (existing) {
             return existing
         }
 
-        // Create new progress with shuffled answers
-        const questions = getFromStorage<Question[]>(STORAGE_KEYS.QUESTIONS(folderId), [])
+        // Create new progress using provided questions (or cached)
+        const qs = questions || questionsByFolder[folderId] || []
         const shuffledAnswers: Record<string, number[]> = {}
         const questionProgress: Record<string, QuestionProgress> = {}
 
-        for (const question of questions) {
+        for (const question of qs) {
             const { indices } = shuffleArray(question.answerOptions)
             shuffledAnswers[question.id] = indices
             questionProgress[question.id] = {
@@ -327,7 +398,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
         setToStorage(STORAGE_KEYS.PROGRESS(folderId), progress)
         return progress
-    }, [])
+    }, [questionsByFolder])
 
     const updateProgress = React.useCallback((
         folderId: string,
@@ -352,8 +423,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }, [])
 
     const resetProgress = React.useCallback((folderId: string): FolderProgress => {
-        // Create new progress with fresh shuffled answers
-        const questions = getFromStorage<Question[]>(STORAGE_KEYS.QUESTIONS(folderId), [])
+        const questions = questionsByFolder[folderId] || []
         const shuffledAnswers: Record<string, number[]> = {}
         const questionProgress: Record<string, QuestionProgress> = {}
 
@@ -375,9 +445,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
         setToStorage(STORAGE_KEYS.PROGRESS(folderId), progress)
         return progress
-    }, [])
+    }, [questionsByFolder])
 
-    // ========== Current State Operations ==========
+    // ========== Current State Operations (localStorage — per-user) ==========
 
     const getCurrentState = React.useCallback((folderId: string): { questionIndex: number; testMode: 'study' | 'review' } => {
         return getFromStorage(STORAGE_KEYS.CURRENT_STATE(folderId), { questionIndex: 0, testMode: 'study' })
@@ -393,6 +463,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         addFolder,
         deleteFolder,
         refreshFolders,
+        loadQuestionsForFolder,
         getQuestions,
         addQuestions,
         getErrors,
@@ -419,6 +490,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         addFolder,
         deleteFolder,
         refreshFolders,
+        loadQuestionsForFolder,
         getQuestions,
         addQuestions,
         getErrors,

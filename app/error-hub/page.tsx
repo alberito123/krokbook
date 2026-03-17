@@ -28,18 +28,46 @@ export default function ErrorHubPage() {
   const [userSelections, setUserSelections] = React.useState<Record<string, number>>({})
   const [resolvedQuestionIds, setResolvedQuestionIds] = React.useState<Set<string>>(new Set())
 
-  // Load all error questions
-  React.useEffect(() => {
-    const errors = store.getErrorQuestions()
-    setErrorQuestions(errors)
+  // Load questions for all folders with errors, then build error list
+  const storeRef = React.useRef(store)
+  storeRef.current = store
+  const loadedRef = React.useRef(false)
 
-    // Initialize shuffled answers
-    const shuffled: Record<string, number[]> = {}
-    for (const { question } of errors) {
-      shuffled[question.id] = shuffleArraySimple(question.answerOptions.map((_, i) => i))
+  React.useEffect(() => {
+    if (store.isLoading || loadedRef.current) return
+    loadedRef.current = true
+
+    const s = storeRef.current
+    const loadErrors = async () => {
+      const foldersWithErrors = s.folders.filter(f => {
+        return s.getErrors(f.id).some(e => !e.isResolved)
+      })
+
+      const loadedQuestionsPerFolder = await Promise.all(
+        foldersWithErrors.map(f => s.loadQuestionsForFolder(f.id))
+      )
+
+      const allErrors: QuestionWithError[] = []
+      foldersWithErrors.forEach((folder, i) => {
+        const questions = loadedQuestionsPerFolder[i]
+        const folderErrors = s.getErrors(folder.id).filter(e => !e.isResolved)
+        for (const error of folderErrors) {
+          const question = questions.find(q => q.id === error.questionId)
+          if (question) allErrors.push({ question, error })
+        }
+      })
+
+      setErrorQuestions(allErrors)
+
+      const shuffled: Record<string, number[]> = {}
+      for (const { question } of allErrors) {
+        shuffled[question.id] = shuffleArraySimple(question.answerOptions.map((_, i) => i))
+      }
+      setShuffledAnswers(shuffled)
     }
-    setShuffledAnswers(shuffled)
-  }, [store])
+
+    loadErrors()
+  }, [store.isLoading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filter by folder
   const filteredErrors = React.useMemo(() => {

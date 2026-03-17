@@ -74,20 +74,12 @@ export default function DashboardPage() {
     return store.folders.find(f => f.id === selectedFolderId)?.name
   }, [selectedFolderId, store.folders])
 
-  // Load folder data when folder is selected
-  React.useEffect(() => {
-    if (!selectedFolderId) {
-      setQuestions([])
-      setProgress(null)
-      setErrorQuestions([])
-      return
-    }
+  // Load folder data from Supabase when folder is selected
+  const loadFolderData = React.useCallback(async (folderId: string) => {
+    const loadedQuestions = await store.loadQuestionsForFolder(folderId)
+    const loadedProgress = store.getProgress(folderId, loadedQuestions)
+    const loadedErrors = store.getErrors(folderId)
 
-    const loadedQuestions = store.getQuestions(selectedFolderId)
-    const loadedProgress = store.getProgress(selectedFolderId)
-    const loadedErrors = store.getErrors(selectedFolderId)
-
-    // Build error questions (sorted by createdAt desc - newest first)
     const errQuestions: QuestionWithError[] = loadedErrors
       .filter(error => !error.isResolved)
       .map(error => {
@@ -101,11 +93,21 @@ export default function DashboardPage() {
     setProgress(loadedProgress)
     setErrorQuestions(errQuestions)
 
-    // Load saved current state
-    const savedState = store.getCurrentState(selectedFolderId)
-    setCurrentQuestionIndex(Math.min(savedState.questionIndex, loadedQuestions.length - 1))
+    const savedState = store.getCurrentState(folderId)
+    setCurrentQuestionIndex(Math.min(savedState.questionIndex, Math.max(0, loadedQuestions.length - 1)))
     setTestMode(savedState.testMode)
-  }, [selectedFolderId, store])
+  }, [store])
+
+  React.useEffect(() => {
+    if (!selectedFolderId) {
+      setQuestions([])
+      setProgress(null)
+      setErrorQuestions([])
+      return
+    }
+
+    loadFolderData(selectedFolderId)
+  }, [selectedFolderId, loadFolderData])
 
   const handleFolderSelect = React.useCallback((folderId: string) => {
     const params = new URLSearchParams(searchParams.toString())
@@ -113,8 +115,8 @@ export default function DashboardPage() {
     router.push(`/dashboard?${params.toString()}`)
   }, [router, searchParams])
 
-  const handleFolderDelete = React.useCallback((folderId: string) => {
-    store.deleteFolder(folderId)
+  const handleFolderDelete = React.useCallback(async (folderId: string) => {
+    await store.deleteFolder(folderId)
 
     // If the deleted folder was selected, clear selection
     if (selectedFolderId === folderId) {
@@ -128,15 +130,16 @@ export default function DashboardPage() {
 
   const handleUploadComplete = React.useCallback((folderId?: string) => {
     setIsUploadModalOpen(false)
-    store.refreshFolders()
 
     if (folderId) {
-      // Navigate to the new folder
+      // Navigate to the new folder (state already updated by addFolder/addQuestions)
       router.push(`/dashboard?folder=${folderId}`)
     } else if (selectedFolderId) {
-      // Reload current folder
+      // Questions were added to current folder — refresh from cache
       const loadedQuestions = store.getQuestions(selectedFolderId)
       setQuestions(loadedQuestions)
+      const loadedProgress = store.getProgress(selectedFolderId, loadedQuestions)
+      setProgress(loadedProgress)
     }
   }, [store, selectedFolderId, router])
 
