@@ -156,7 +156,7 @@ export function Tester({
     <div className="h-full flex flex-col">
       {/* Header */}
       <div className="border-b border-zinc-200 pb-4 mb-4">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-center md:justify-between mb-4">
           <div className="flex items-center gap-2">
             {/* Sidebar Toggle - hidden on mobile */}
             {onToggleSidebar && (
@@ -203,7 +203,7 @@ export function Tester({
               <RotateCcw className="h-4 w-4" />
             </Button>
             {/* Font size controls */}
-            <div className="flex items-center gap-1 border border-zinc-200 rounded-md px-1">
+            <div className="flex items-center gap-1 border border-zinc-200 rounded-md px-1 h-8">
               <button
                 onClick={() => changeFontSize(-FONT_SIZE_STEP)}
                 disabled={fontSize <= FONT_SIZE_MIN}
