@@ -101,10 +101,23 @@ function DashboardPageInner() {
 
   // Load folder data from Supabase when folder is selected
   const { loadQuestionsForFolder, getProgress, getErrors, getCurrentState } = store
-  const loadFolderData = React.useCallback(async (folderId: string) => {
-    const loadedQuestions = await loadQuestionsForFolder(folderId)
-    const loadedProgress = getProgress(folderId, loadedQuestions)
-    const loadedErrors = getErrors(folderId)
+
+  // Stable refs for store functions to avoid re-triggering the load effect
+  const loadQuestionsForFolderRef = React.useRef(loadQuestionsForFolder)
+  React.useEffect(() => { loadQuestionsForFolderRef.current = loadQuestionsForFolder }, [loadQuestionsForFolder])
+  const getProgressRef = React.useRef(getProgress)
+  React.useEffect(() => { getProgressRef.current = getProgress }, [getProgress])
+  const getErrorsRef = React.useRef(getErrors)
+  React.useEffect(() => { getErrorsRef.current = getErrors }, [getErrors])
+  const getCurrentStateRef = React.useRef(getCurrentState)
+  React.useEffect(() => { getCurrentStateRef.current = getCurrentState }, [getCurrentState])
+
+  const loadFolderData = React.useCallback(async (folderId: string, isCancelled: () => boolean) => {
+    const loadedQuestions = await loadQuestionsForFolderRef.current(folderId)
+    if (isCancelled()) return
+
+    const loadedProgress = getProgressRef.current(folderId, loadedQuestions)
+    const loadedErrors = getErrorsRef.current(folderId)
 
     const errQuestions: QuestionWithError[] = loadedErrors
       .filter(error => !error.isResolved)
@@ -115,14 +128,16 @@ function DashboardPageInner() {
       .filter((item): item is QuestionWithError => item !== null)
       .sort((a, b) => new Date(b.error.createdAt).getTime() - new Date(a.error.createdAt).getTime())
 
+    if (isCancelled()) return
+
     setQuestions(loadedQuestions)
     setProgress(loadedProgress)
     setErrorQuestions(errQuestions)
 
-    const savedState = getCurrentState(folderId)
+    const savedState = getCurrentStateRef.current(folderId)
     setCurrentQuestionIndex(Math.min(savedState.questionIndex, Math.max(0, loadedQuestions.length - 1)))
     setTestMode(savedState.testMode)
-  }, [loadQuestionsForFolder, getProgress, getErrors, getCurrentState])
+  }, [])
 
   React.useEffect(() => {
     if (!selectedFolderId) {
@@ -132,7 +147,9 @@ function DashboardPageInner() {
       return
     }
 
-    loadFolderData(selectedFolderId)
+    let cancelled = false
+    loadFolderData(selectedFolderId, () => cancelled)
+    return () => { cancelled = true }
   }, [selectedFolderId, loadFolderData])
 
   const handleFolderSelect = React.useCallback((folderId: string) => {
