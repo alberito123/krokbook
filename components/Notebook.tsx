@@ -316,6 +316,13 @@ interface ErrorQuestionCardProps {
 function ErrorQuestionCard({ question, error, blurred, onNotesUpdate }: ErrorQuestionCardProps) {
   const [notes, setNotes] = React.useState(error.notes || '')
   const saveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null)
+  const pendingNotesRef = React.useRef<string | null>(null)
+  const onNotesUpdateRef = React.useRef(onNotesUpdate)
+  const errorIdRef = React.useRef(error.id)
+
+  // Keep refs in sync
+  onNotesUpdateRef.current = onNotesUpdate
+  errorIdRef.current = error.id
 
   React.useEffect(() => {
     setNotes(error.notes || '')
@@ -323,22 +330,28 @@ function ErrorQuestionCard({ question, error, blurred, onNotesUpdate }: ErrorQue
 
   const handleNotesUpdate = React.useCallback((newNotes: string) => {
     setNotes(newNotes)
+    pendingNotesRef.current = newNotes
 
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current)
     }
 
     saveTimeoutRef.current = setTimeout(() => {
-      if (onNotesUpdate) {
-        onNotesUpdate(error.id, newNotes)
+      if (onNotesUpdateRef.current) {
+        onNotesUpdateRef.current(errorIdRef.current, newNotes)
       }
+      pendingNotesRef.current = null
     }, 2000)
-  }, [error.id, onNotesUpdate])
+  }, [])
 
   React.useEffect(() => {
     return () => {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current)
+      }
+      // Flush pending save on unmount
+      if (pendingNotesRef.current !== null && onNotesUpdateRef.current) {
+        onNotesUpdateRef.current(errorIdRef.current, pendingNotesRef.current)
       }
     }
   }, [])

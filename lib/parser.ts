@@ -1,8 +1,9 @@
 import { ParsedQuestion } from '@/lib/types'
+import { LATIN_LETTERS, CYRILLIC_LETTERS, CYRILLIC_TO_LATIN_MAP } from '@/lib/constants'
 
 /**
  * Universal Parser for Ukrainian Pharmacy Test Files
- * 
+ *
  * Supports multiple formats:
  * 1. Letter labels (A. B. C. D. E.) with ANSWER: X
  * 2. Letter labels with asterisk (*) marking correct answer
@@ -12,19 +13,6 @@ import { ParsedQuestion } from '@/lib/types'
  * 6. Questions with/without empty lines between them
  * 7. Dash placeholders (-, —, ---) as empty options
  */
-
-// ============ Constants ============
-
-const LATIN_LETTERS = 'ABCDEFGHIJ'
-const CYRILLIC_LETTERS = 'АБВГДЕЄЖЗИ'
-
-// Cyrillic letters that look like Latin (for answer parsing)
-const CYRILLIC_TO_LATIN_MAP: Record<string, number> = {
-  'А': 0, // A
-  'В': 1, // B (Cyrillic В looks like Latin B)
-  'С': 2, // C (Cyrillic С looks like Latin C)
-  'Е': 4, // E (Cyrillic Е looks like Latin E)
-}
 
 // ============ Types ============
 
@@ -67,8 +55,6 @@ export function parseRawText(text: string, sourceFile?: string): ParsedQuestion[
       questions.push(parsed)
     }
   }
-  
-  console.log(`[parser] Parsed ${questions.length} questions from ${sourceFile || 'text'}`)
   
   return questions
 }

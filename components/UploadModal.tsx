@@ -139,12 +139,7 @@ export function UploadModal({
           if (isHtmlContent(result.textContent)) {
             questions = parseDocxTableHtml(result.textContent, result.fileName)
           } else {
-            console.log('[UploadModal] Parsing raw text, first 500 chars:', result.textContent.substring(0, 500))
             questions = parseRawText(result.textContent, result.fileName)
-            console.log('[UploadModal] Parsed questions:', questions.length, 'valid:', questions.filter(q => q.isValid).length)
-            if (questions.length > 0) {
-              console.log('[UploadModal] First question:', questions[0])
-            }
           }
 
           allQuestions.push(...questions)

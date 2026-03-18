@@ -94,7 +94,9 @@ export function Sidebar({
 
     setDeletingFolderId(folderId)
     try {
-      onFolderDelete(folderId)
+      await onFolderDelete(folderId)
+    } catch (err) {
+      console.error('Failed to delete folder:', err)
     } finally {
       setDeletingFolderId(null)
     }

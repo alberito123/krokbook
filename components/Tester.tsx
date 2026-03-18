@@ -100,7 +100,20 @@ export function Tester({
     setSearchQuery('')
   }
 
-  const currentQuestion = filteredQuestions[currentQuestionIndex]
+  // Clamp currentQuestionIndex to valid range when filteredQuestions changes
+  const safeCurrentQuestionIndex = React.useMemo(() => {
+    if (filteredQuestions.length === 0) return 0
+    return Math.min(currentQuestionIndex, filteredQuestions.length - 1)
+  }, [currentQuestionIndex, filteredQuestions.length])
+
+  // Reset parent's index when out of bounds
+  React.useEffect(() => {
+    if (filteredQuestions.length > 0 && currentQuestionIndex >= filteredQuestions.length) {
+      onQuestionSelect(0)
+    }
+  }, [filteredQuestions.length, currentQuestionIndex, onQuestionSelect])
+
+  const currentQuestion = filteredQuestions[safeCurrentQuestionIndex]
   const currentProgress = currentQuestion
     ? progress.questionProgress[currentQuestion.id]
     : null
@@ -136,8 +149,8 @@ export function Tester({
     onAnswerSelect(currentQuestion.id, originalIndex, isCorrect)
   }
 
-  const canGoPrev = currentQuestionIndex > 0
-  const canGoNext = currentQuestionIndex < filteredQuestions.length - 1
+  const canGoPrev = safeCurrentQuestionIndex > 0
+  const canGoNext = safeCurrentQuestionIndex < filteredQuestions.length - 1
 
   return (
     <div className="h-full flex flex-col">
@@ -231,7 +244,7 @@ export function Tester({
             {filteredQuestions.map((question, index) => {
               const qProgress = progress.questionProgress[question.id]
               const status = qProgress?.status || 'unanswered'
-              const isActive = index === currentQuestionIndex
+              const isActive = index === safeCurrentQuestionIndex
 
               // Determine button styles based on status and active state
               let buttonClasses = 'w-8 h-8 rounded text-xs font-medium'
@@ -295,7 +308,7 @@ export function Tester({
           <div className="mt-3 text-sm text-zinc-600">
             {filteredQuestions.length > 0 ? (
               <>
-                Question {currentQuestionIndex + 1} of {filteredQuestions.length}
+                Question {safeCurrentQuestionIndex + 1} of {filteredQuestions.length}
                 {searchQuery && (
                   <span className="text-zinc-500 ml-2">
                     (filtered from {questions.length})
@@ -418,7 +431,7 @@ export function Tester({
           <div className="text-sm text-zinc-600">
             {filteredQuestions.length > 0 && (
               <span>
-                {currentQuestionIndex + 1} / {filteredQuestions.length}
+                {safeCurrentQuestionIndex + 1} / {filteredQuestions.length}
               </span>
             )}
           </div>

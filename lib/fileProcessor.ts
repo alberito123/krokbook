@@ -399,7 +399,6 @@ export async function processFiles(files: File[]): Promise<FileProcessingResult[
             // This ensures OMML formulas are properly converted to text
             try {
               textContent = await extractDocxTextWithFormulas(arrayBuffer)
-              console.log('[fileProcessor] Used custom XML parser, lines:', textContent.split('\n').length)
             } catch (err) {
               // Fallback to mammoth if custom parser fails
               console.error('[fileProcessor] Custom parser failed, using mammoth fallback:', err)

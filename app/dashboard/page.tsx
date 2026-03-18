@@ -13,12 +13,20 @@ import type { Question, QuestionWithError, TestMode, FolderProgress } from '@/li
 
 /**
  * Dashboard Page
- * 
+ *
  * Main application page with responsive layout:
  * - Desktop: Split-screen with Sidebar + Tester + Notebook
  * - Mobile: Hamburger menu + tab-based navigation between Tester/Notebook
  */
 export default function DashboardPage() {
+  return (
+    <React.Suspense fallback={<div className="flex items-center justify-center h-[100dvh]"><p className="text-zinc-500">Loading...</p></div>}>
+      <DashboardPageInner />
+    </React.Suspense>
+  )
+}
+
+function DashboardPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const selectedFolderId = searchParams.get('folder')
@@ -92,10 +100,11 @@ export default function DashboardPage() {
   }, [selectedFolderId, store.folders])
 
   // Load folder data from Supabase when folder is selected
+  const { loadQuestionsForFolder, getProgress, getErrors, getCurrentState } = store
   const loadFolderData = React.useCallback(async (folderId: string) => {
-    const loadedQuestions = await store.loadQuestionsForFolder(folderId)
-    const loadedProgress = store.getProgress(folderId, loadedQuestions)
-    const loadedErrors = store.getErrors(folderId)
+    const loadedQuestions = await loadQuestionsForFolder(folderId)
+    const loadedProgress = getProgress(folderId, loadedQuestions)
+    const loadedErrors = getErrors(folderId)
 
     const errQuestions: QuestionWithError[] = loadedErrors
       .filter(error => !error.isResolved)
@@ -110,10 +119,10 @@ export default function DashboardPage() {
     setProgress(loadedProgress)
     setErrorQuestions(errQuestions)
 
-    const savedState = store.getCurrentState(folderId)
+    const savedState = getCurrentState(folderId)
     setCurrentQuestionIndex(Math.min(savedState.questionIndex, Math.max(0, loadedQuestions.length - 1)))
     setTestMode(savedState.testMode)
-  }, [store])
+  }, [loadQuestionsForFolder, getProgress, getErrors, getCurrentState])
 
   React.useEffect(() => {
     if (!selectedFolderId) {

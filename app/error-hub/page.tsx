@@ -31,11 +31,9 @@ export default function ErrorHubPage() {
   // Load questions for all folders with errors, then build error list
   const storeRef = React.useRef(store)
   storeRef.current = store
-  const loadedRef = React.useRef(false)
 
   React.useEffect(() => {
-    if (store.isLoading || loadedRef.current) return
-    loadedRef.current = true
+    if (store.isLoading) return
 
     const s = storeRef.current
     const loadErrors = async () => {
