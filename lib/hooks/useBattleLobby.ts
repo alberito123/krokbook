@@ -1,7 +1,6 @@
 'use client'
 
 import * as React from 'react'
-import { BATTLE_HEARTBEAT_INTERVAL_MS } from '@/lib/battle/constants'
 import type { BattleChallenge, BattleLobbyState } from '@/lib/battle/types'
 
 const LOBBY_POLL_INTERVAL_MS = 5_000
@@ -61,27 +60,13 @@ export function useBattleLobby(isEnabled = true): BattleLobbyHookState {
 
   React.useEffect(() => {
     if (!isEnabled) return
-
-    const heartbeat = async () => {
-      await fetch('/api/battle/presence', {
-        method: 'POST',
-        credentials: 'include',
-      }).catch(() => undefined)
-    }
-
-    heartbeat()
     refreshLobby().catch(() => undefined)
-
-    const heartbeatId = window.setInterval(() => {
-      heartbeat()
-    }, BATTLE_HEARTBEAT_INTERVAL_MS)
 
     const refreshId = window.setInterval(() => {
       refreshLobby().catch(() => undefined)
     }, LOBBY_POLL_INTERVAL_MS)
 
     return () => {
-      window.clearInterval(heartbeatId)
       window.clearInterval(refreshId)
     }
   }, [isEnabled, refreshLobby])

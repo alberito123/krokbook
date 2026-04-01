@@ -53,7 +53,8 @@ export function useBattleSession(): BattleSessionState {
       setError(null)
     } catch (nextError) {
       setProfile(null)
-      setError(nextError instanceof Error ? nextError.message : 'Failed to load battle session')
+      const message = nextError instanceof Error ? nextError.message : 'Failed to load battle session'
+      setError(message === 'Battle session not found' ? null : message)
     } finally {
       setIsLoading(false)
     }

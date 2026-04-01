@@ -176,6 +176,28 @@ export async function listOnlineBattleProfiles(
   return (profileRows as BattleProfileRow[]).map(mapBattleProfile)
 }
 
+export async function isBattleProfileOnline(
+  profileId: string,
+  now = new Date()
+): Promise<boolean> {
+  const supabase = createSupabaseAdminClient()
+  const onlineSince = new Date(now.getTime() - BATTLE_PRESENCE_TTL_MS).toISOString()
+
+  const { data, error } = await supabase
+    .from('battle_presence')
+    .select('profile_id,status,last_seen_at')
+    .eq('profile_id', profileId)
+    .eq('status', 'online')
+    .gte('last_seen_at', onlineSince)
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  return Boolean(data)
+}
+
 export async function listActiveBattleChallenges(
   profileId: string,
   now = new Date()
@@ -216,7 +238,10 @@ export async function listActiveBattleChallenges(
   }
 }
 
-export async function findActiveBattleMatch(profileId: string): Promise<BattleMatch | null> {
+export async function findActiveBattleMatch(
+  profileId: string,
+  now = new Date()
+): Promise<BattleMatch | null> {
   const supabase = createSupabaseAdminClient()
   const { data: playerRows, error: playerError } = await supabase
     .from('battle_match_players')
@@ -244,8 +269,17 @@ export async function findActiveBattleMatch(profileId: string): Promise<BattleMa
     throw matchError
   }
 
-  const [matchRow] = (matchRows as BattleMatchRow[]) ?? []
-  return matchRow ? mapBattleMatch(matchRow) : null
+  for (const matchRow of (matchRows as BattleMatchRow[]) ?? []) {
+    const match = mapBattleMatch(matchRow)
+    if (isBattleMatchExpired(match, now)) {
+      await finalizeBattleMatch(match.id, now)
+      continue
+    }
+
+    return match
+  }
+
+  return null
 }
 
 export async function getBattleLobbyState(
@@ -255,7 +289,7 @@ export async function getBattleLobbyState(
   const [onlineProfiles, activeChallenges, activeMatch] = await Promise.all([
     listOnlineBattleProfiles(profile.id, now),
     listActiveBattleChallenges(profile.id, now),
-    findActiveBattleMatch(profile.id),
+    findActiveBattleMatch(profile.id, now),
   ])
 
   return {
@@ -308,7 +342,7 @@ export async function hasActiveBattle(
     return true
   }
 
-  const activeMatch = await findActiveBattleMatch(profileId)
+  const activeMatch = await findActiveBattleMatch(profileId, now)
   return activeMatch !== null
 }
 
@@ -604,7 +638,8 @@ function isBattleMatchExpired(match: BattleMatch, now = new Date()): boolean {
 }
 
 export async function getCurrentBattleMatchState(profileId: string): Promise<BattleCurrentMatchState | null> {
-  const match = await findActiveBattleMatch(profileId)
+  const now = new Date()
+  const match = await findActiveBattleMatch(profileId, now)
   if (!match) {
     return null
   }
@@ -845,20 +880,40 @@ export async function getBattleResult(matchId: string, profileId: string): Promi
     throw new Error('Battle match not found')
   }
 
-  const finalMatch = match.status === 'finished' ? match : await finalizeBattleMatch(match.id)
-  const players = await listBattleMatchPlayers(finalMatch.id)
-
+  const players = await listBattleMatchPlayers(match.id)
   const self = players.find(player => player.profileId === profileId)
   const opponent = players.find(player => player.profileId !== profileId)
 
-  if (!self || !opponent) {
+  if (!self) {
+    throw new Error('Battle player not found')
+  }
+
+  if (!opponent) {
+    throw new Error('Battle match players are inconsistent')
+  }
+
+  const finalMatch = match.status === 'finished'
+    ? match
+    : isBattleMatchExpired(match)
+      ? await finalizeBattleMatch(match.id)
+      : null
+
+  if (!finalMatch) {
+    throw new Error('Battle result is not ready')
+  }
+
+  const finalPlayers = await listBattleMatchPlayers(finalMatch.id)
+  const finalSelf = finalPlayers.find(player => player.profileId === profileId)
+  const finalOpponent = finalPlayers.find(player => player.profileId !== profileId)
+
+  if (!finalSelf || !finalOpponent) {
     throw new Error('Battle match players are inconsistent')
   }
 
   return {
     matchId: finalMatch.id,
-    outcome: resolveBattleOutcome(self.score, opponent.score),
-    selfScore: self.score,
-    opponentScore: opponent.score,
+    outcome: resolveBattleOutcome(finalSelf.score, finalOpponent.score),
+    selfScore: finalSelf.score,
+    opponentScore: finalOpponent.score,
   }
 }

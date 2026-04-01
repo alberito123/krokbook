@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server'
 import { findBattleProfileById } from '@/lib/server/battle-auth'
 import { readBattleSessionProfileId } from '@/lib/server/battle-session'
-import { createChallenge, findFolder, hasActiveBattle, listQuestionsForFolder } from '@/lib/server/battle-repository'
+import {
+  createChallenge,
+  findFolder,
+  hasActiveBattle,
+  isBattleProfileOnline,
+  listQuestionsForFolder,
+} from '@/lib/server/battle-repository'
 
 function parsePositiveInteger(value: unknown): number | null {
   if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
@@ -32,12 +38,13 @@ export async function POST(request: Request) {
   }
 
   try {
-    const [challenger, opponent, folder, challengerBusy, opponentBusy] = await Promise.all([
+    const [challenger, opponent, folder, challengerBusy, opponentBusy, opponentOnline] = await Promise.all([
       findBattleProfileById(challengerProfileId),
       findBattleProfileById(opponentProfileId),
       findFolder(folderId),
       hasActiveBattle(challengerProfileId),
       hasActiveBattle(opponentProfileId),
+      isBattleProfileOnline(opponentProfileId),
     ])
 
     if (!challenger || !opponent) {
@@ -50,6 +57,10 @@ export async function POST(request: Request) {
 
     if (challengerBusy || opponentBusy) {
       return NextResponse.json({ error: 'One of the players already has an active battle' }, { status: 409 })
+    }
+
+    if (!opponentOnline) {
+      return NextResponse.json({ error: 'The selected player is no longer online' }, { status: 409 })
     }
 
     const questions = await listQuestionsForFolder(folderId)

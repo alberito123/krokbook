@@ -22,9 +22,14 @@ export async function GET(_request: Request, context: RouteContext) {
 
     if (
       message === 'Battle match not found' ||
+      message === 'Battle player not found' ||
       message === 'Battle match players are inconsistent'
     ) {
       return NextResponse.json({ error: message }, { status: 404 })
+    }
+
+    if (message === 'Battle result is not ready') {
+      return NextResponse.json({ error: message }, { status: 409 })
     }
 
     console.error('Failed to load battle result:', error)

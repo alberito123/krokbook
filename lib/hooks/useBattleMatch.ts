@@ -47,7 +47,8 @@ export function useBattleMatch(isEnabled = true): BattleMatchHookState {
       setError(null)
     } catch (nextError) {
       setMatchState(null)
-      setError(nextError instanceof Error ? nextError.message : 'Failed to load battle match')
+      const message = nextError instanceof Error ? nextError.message : 'Failed to load battle match'
+      setError(message === 'Active battle match not found' ? null : message)
       throw nextError
     } finally {
       setIsLoading(false)

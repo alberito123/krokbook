@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { BattlePresenceSync } from '@/components/BattlePresenceSync'
 import { StoreProvider } from '@/lib/store'
 import './globals.css'
 
@@ -16,6 +17,7 @@ export default function RootLayout({
     <html lang="en" className="light">
       <body className="font-apple antialiased">
         <StoreProvider>
+          <BattlePresenceSync />
           {children}
         </StoreProvider>
       </body>
