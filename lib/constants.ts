@@ -14,6 +14,7 @@ export const STORAGE_KEYS = {
   ALL_ERRORS: 'krokbook-all-errors',
   FOLDER_NOTES: (folderId: string) => `krokbook-folder-notes-${folderId}`,
   PANEL_VISIBILITY: 'panelVisibility',
+  BATTLE_PROFILE_HINT: 'krokbook-battle-profile-hint',
 } as const
 
 // Validation limits
