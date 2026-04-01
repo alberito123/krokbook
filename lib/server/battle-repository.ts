@@ -1,12 +1,19 @@
 import type {
+  BattleCurrentMatchState,
   BattleChallenge,
   BattleLobbyState,
   BattleMatch,
+  BattleMatchPlayer,
   BattlePresence,
   BattleProfile,
+  BattleQuestionSnapshot,
+  BattleQuestionView,
+  BattleResultView,
 } from '@/lib/battle/types'
 import { BATTLE_CHALLENGE_TTL_MS, BATTLE_PRESENCE_TTL_MS } from '@/lib/battle/constants'
 import { createBattleQuestionSelection } from '@/lib/battle/question-selection'
+import { isBattleAnswerCorrect, resolveBattleOutcome, resolveWinner } from '@/lib/battle/scoring'
+import { serializeBattleQuestions } from '@/lib/battle/serialization'
 import type { Question } from '@/lib/types'
 import { createSupabaseAdminClient } from './supabase-admin'
 import { mapBattleProfile } from './battle-auth'
@@ -58,7 +65,26 @@ interface QuestionRow {
 }
 
 interface BattleMatchPlayerRow {
+  id: string
   match_id: string
+  profile_id: string
+  status: BattleMatchPlayer['status']
+  score: number
+  finished_at: string | null
+}
+
+interface BattleMatchQuestionRow {
+  id: string
+  match_id: string
+  question_id: string
+  position: number
+  answer_order: number[]
+}
+
+interface BattleMatchAnswerRow {
+  match_question_id: string
+  profile_id: string
+  is_correct: boolean
 }
 
 interface BattlePresenceRow {
@@ -458,5 +484,381 @@ export async function acceptChallenge(challenge: BattleChallenge, now = new Date
       await supabase.from('battle_matches').delete().eq('id', matchId)
     }
     throw error
+  }
+}
+
+function mapBattleMatchPlayer(row: BattleMatchPlayerRow): BattleMatchPlayer {
+  return {
+    id: row.id,
+    matchId: row.match_id,
+    profileId: row.profile_id,
+    status: row.status,
+    score: row.score,
+    finishedAt: row.finished_at,
+  }
+}
+
+async function findBattleMatchById(matchId: string): Promise<BattleMatch | null> {
+  const supabase = createSupabaseAdminClient()
+  const { data, error } = await supabase
+    .from('battle_matches')
+    .select('id,challenge_id,folder_id,question_count,time_limit_seconds,status,start_at,end_at,winner_profile_id,created_at')
+    .eq('id', matchId)
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  return data ? mapBattleMatch(data as BattleMatchRow) : null
+}
+
+async function listBattleMatchPlayers(matchId: string): Promise<BattleMatchPlayer[]> {
+  const supabase = createSupabaseAdminClient()
+  const { data, error } = await supabase
+    .from('battle_match_players')
+    .select('id,match_id,profile_id,status,score,finished_at')
+    .eq('match_id', matchId)
+
+  if (error) {
+    throw error
+  }
+
+  return (data as BattleMatchPlayerRow[]).map(mapBattleMatchPlayer)
+}
+
+async function listBattleMatchQuestions(matchId: string): Promise<BattleMatchQuestionRow[]> {
+  const supabase = createSupabaseAdminClient()
+  const { data, error } = await supabase
+    .from('battle_match_questions')
+    .select('id,match_id,question_id,position,answer_order')
+    .eq('match_id', matchId)
+    .order('position', { ascending: true })
+
+  if (error) {
+    throw error
+  }
+
+  return data as BattleMatchQuestionRow[]
+}
+
+async function listBattleMatchAnswers(matchId: string): Promise<BattleMatchAnswerRow[]> {
+  const supabase = createSupabaseAdminClient()
+  const { data, error } = await supabase
+    .from('battle_match_answers')
+    .select('match_question_id,profile_id,is_correct')
+    .eq('match_id', matchId)
+
+  if (error) {
+    throw error
+  }
+
+  return data as BattleMatchAnswerRow[]
+}
+
+async function buildBattleQuestionSnapshots(matchId: string): Promise<{
+  matchQuestions: BattleMatchQuestionRow[]
+  snapshots: BattleQuestionSnapshot[]
+}> {
+  const matchQuestions = await listBattleMatchQuestions(matchId)
+  if (matchQuestions.length === 0) {
+    return { matchQuestions: [], snapshots: [] }
+  }
+
+  const supabase = createSupabaseAdminClient()
+  const questionIds = matchQuestions.map(row => row.question_id)
+  const { data, error } = await supabase
+    .from('questions')
+    .select('id,folder_id,question_text,answer_options,correct_answer_index,source_file')
+    .in('id', questionIds)
+
+  if (error) {
+    throw error
+  }
+
+  const questionById = new Map((data as QuestionRow[]).map(row => [row.id, row] as const))
+
+  const snapshots = matchQuestions.flatMap(matchQuestion => {
+    const question = questionById.get(matchQuestion.question_id)
+    if (!question) {
+      return []
+    }
+
+    return [{
+      questionId: question.id,
+      position: matchQuestion.position,
+      questionText: question.question_text,
+      sourceFile: question.source_file ?? undefined,
+      answerOptions: question.answer_options,
+      answerOrder: matchQuestion.answer_order,
+      correctAnswerIndex: question.correct_answer_index,
+    }]
+  })
+
+  return { matchQuestions, snapshots }
+}
+
+function isBattleMatchExpired(match: BattleMatch, now = new Date()): boolean {
+  const expiresAt = new Date(match.startAt).getTime() + match.timeLimitSeconds * 1000
+  return now.getTime() >= expiresAt
+}
+
+export async function getCurrentBattleMatchState(profileId: string): Promise<BattleCurrentMatchState | null> {
+  const match = await findActiveBattleMatch(profileId)
+  if (!match) {
+    return null
+  }
+
+  const [players, answers, snapshotData] = await Promise.all([
+    listBattleMatchPlayers(match.id),
+    listBattleMatchAnswers(match.id),
+    buildBattleQuestionSnapshots(match.id),
+  ])
+
+  const self = players.find(player => player.profileId === profileId)
+  const opponent = players.find(player => player.profileId !== profileId)
+
+  if (!self || !opponent) {
+    throw new Error('Battle match players are inconsistent')
+  }
+
+  const answerCounts = answers.reduce<Map<string, number>>((counts, answer) => {
+    counts.set(answer.profile_id, (counts.get(answer.profile_id) ?? 0) + 1)
+    return counts
+  }, new Map())
+
+  return {
+    match,
+    self,
+    opponent,
+    questions: serializeBattleQuestions(snapshotData.snapshots),
+    selfProgress: {
+      answeredCount: answerCounts.get(self.profileId) ?? 0,
+      totalQuestions: match.questionCount,
+      status: self.status,
+    },
+    opponentProgress: {
+      answeredCount: answerCounts.get(opponent.profileId) ?? 0,
+      totalQuestions: match.questionCount,
+      status: opponent.status,
+    },
+  }
+}
+
+export async function submitBattleAnswer(input: {
+  matchId: string
+  profileId: string
+  questionId: string
+  selectedIndex: number
+}): Promise<void> {
+  const supabase = createSupabaseAdminClient()
+  const match = await findBattleMatchById(input.matchId)
+
+  if (!match) {
+    throw new Error('Battle match not found')
+  }
+
+  if (match.status !== 'countdown' && match.status !== 'in_progress') {
+    throw new Error('Battle match is not active')
+  }
+
+  const now = new Date()
+  if (now.getTime() < new Date(match.startAt).getTime()) {
+    throw new Error('Battle match has not started yet')
+  }
+
+  if (isBattleMatchExpired(match, now)) {
+    await finalizeBattleMatch(match.id, now)
+    throw new Error('Battle match has already ended')
+  }
+
+  const [players, snapshotData] = await Promise.all([
+    listBattleMatchPlayers(match.id),
+    buildBattleQuestionSnapshots(match.id),
+  ])
+
+  const player = players.find(entry => entry.profileId === input.profileId)
+  if (!player) {
+    throw new Error('Battle player not found')
+  }
+
+  const matchQuestion = snapshotData.matchQuestions.find(entry => entry.question_id === input.questionId)
+  const snapshot = snapshotData.snapshots.find(entry => entry.questionId === input.questionId)
+
+  if (!matchQuestion || !snapshot) {
+    throw new Error('Battle question not found')
+  }
+
+  const { data: existingAnswer, error: existingAnswerError } = await supabase
+    .from('battle_match_answers')
+    .select('id')
+    .eq('match_id', match.id)
+    .eq('profile_id', input.profileId)
+    .eq('match_question_id', matchQuestion.id)
+    .maybeSingle()
+
+  if (existingAnswerError) {
+    throw existingAnswerError
+  }
+
+  if (existingAnswer) {
+    throw new Error('Battle answer already submitted')
+  }
+
+  const isCorrect = isBattleAnswerCorrect(snapshot, input.selectedIndex)
+
+  const { error: insertError } = await supabase
+    .from('battle_match_answers')
+    .insert({
+      match_id: match.id,
+      match_question_id: matchQuestion.id,
+      profile_id: input.profileId,
+      selected_index: input.selectedIndex,
+      is_correct: isCorrect,
+    })
+
+  if (insertError) {
+    throw insertError
+  }
+
+  const { data: playerAnswers, error: playerAnswersError } = await supabase
+    .from('battle_match_answers')
+    .select('id')
+    .eq('match_id', match.id)
+    .eq('profile_id', input.profileId)
+
+  if (playerAnswersError) {
+    throw playerAnswersError
+  }
+
+  const answeredAllQuestions = (playerAnswers ?? []).length >= match.questionCount
+  if (answeredAllQuestions) {
+    const { error: playerUpdateError } = await supabase
+      .from('battle_match_players')
+      .update({
+        status: 'finished',
+        finished_at: now.toISOString(),
+      })
+      .eq('match_id', match.id)
+      .eq('profile_id', input.profileId)
+
+    if (playerUpdateError) {
+      throw playerUpdateError
+    }
+  } else if (match.status === 'countdown') {
+    const { error: playerProgressError } = await supabase
+      .from('battle_match_players')
+      .update({ status: 'in_progress' })
+      .eq('match_id', match.id)
+      .eq('profile_id', input.profileId)
+
+    if (playerProgressError) {
+      throw playerProgressError
+    }
+  }
+
+  const refreshedPlayers = await listBattleMatchPlayers(match.id)
+  const everyoneFinished = refreshedPlayers.every(entry => entry.status === 'finished')
+  if (everyoneFinished) {
+    await finalizeBattleMatch(match.id, now)
+  } else if (match.status === 'countdown') {
+    await supabase
+      .from('battle_matches')
+      .update({ status: 'in_progress' })
+      .eq('id', match.id)
+  }
+}
+
+export async function finalizeBattleMatch(matchId: string, now = new Date()): Promise<BattleMatch> {
+  const supabase = createSupabaseAdminClient()
+  const match = await findBattleMatchById(matchId)
+
+  if (!match) {
+    throw new Error('Battle match not found')
+  }
+
+  if (match.status === 'finished') {
+    return match
+  }
+
+  const [players, answers] = await Promise.all([
+    listBattleMatchPlayers(match.id),
+    listBattleMatchAnswers(match.id),
+  ])
+
+  const scoreByProfileId = answers.reduce<Map<string, number>>((scores, answer) => {
+    const current = scores.get(answer.profile_id) ?? 0
+    scores.set(answer.profile_id, answer.is_correct ? current + 1 : current)
+    return scores
+  }, new Map())
+
+  const [firstPlayer, secondPlayer] = players
+  if (!firstPlayer || !secondPlayer) {
+    throw new Error('Battle match players are inconsistent')
+  }
+
+  const firstScore = scoreByProfileId.get(firstPlayer.profileId) ?? 0
+  const secondScore = scoreByProfileId.get(secondPlayer.profileId) ?? 0
+  const winner = resolveWinner(firstScore, secondScore)
+  const winnerProfileId = winner === 'a'
+    ? firstPlayer.profileId
+    : winner === 'b'
+      ? secondPlayer.profileId
+      : null
+
+  const { error: updatePlayersError } = await supabase
+    .from('battle_match_players')
+    .upsert(players.map(player => ({
+      id: player.id,
+      match_id: player.matchId,
+      profile_id: player.profileId,
+      status: player.finishedAt ? player.status : 'timed_out',
+      score: scoreByProfileId.get(player.profileId) ?? 0,
+      finished_at: player.finishedAt ?? now.toISOString(),
+    })))
+
+  if (updatePlayersError) {
+    throw updatePlayersError
+  }
+
+  const { data, error } = await supabase
+    .from('battle_matches')
+    .update({
+      status: 'finished',
+      end_at: now.toISOString(),
+      winner_profile_id: winnerProfileId,
+    })
+    .eq('id', match.id)
+    .select('id,challenge_id,folder_id,question_count,time_limit_seconds,status,start_at,end_at,winner_profile_id,created_at')
+    .single()
+
+  if (error) {
+    throw error
+  }
+
+  return mapBattleMatch(data as BattleMatchRow)
+}
+
+export async function getBattleResult(matchId: string, profileId: string): Promise<BattleResultView> {
+  const match = await findBattleMatchById(matchId)
+  if (!match) {
+    throw new Error('Battle match not found')
+  }
+
+  const finalMatch = match.status === 'finished' ? match : await finalizeBattleMatch(match.id)
+  const players = await listBattleMatchPlayers(finalMatch.id)
+
+  const self = players.find(player => player.profileId === profileId)
+  const opponent = players.find(player => player.profileId !== profileId)
+
+  if (!self || !opponent) {
+    throw new Error('Battle match players are inconsistent')
+  }
+
+  return {
+    matchId: finalMatch.id,
+    outcome: resolveBattleOutcome(self.score, opponent.score),
+    selfScore: self.score,
+    opponentScore: opponent.score,
   }
 }
