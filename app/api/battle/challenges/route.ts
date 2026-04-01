@@ -78,6 +78,15 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ challenge }, { status: 201 })
   } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to create battle challenge'
+
+    if (
+      message === 'Battle profile already has an active challenge' ||
+      message === 'Battle profile already has an active match'
+    ) {
+      return NextResponse.json({ error: 'One of the players already has an active battle' }, { status: 409 })
+    }
+
     console.error('Failed to create battle challenge:', error)
     return NextResponse.json({ error: 'Failed to create battle challenge' }, { status: 500 })
   }

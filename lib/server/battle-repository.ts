@@ -11,6 +11,7 @@ import type {
   BattleResultView,
 } from '@/lib/battle/types'
 import { BATTLE_CHALLENGE_TTL_MS, BATTLE_PRESENCE_TTL_MS } from '@/lib/battle/constants'
+import { isBattleMatchExpiredAt } from '@/lib/battle/runtime'
 import { createBattleQuestionSelection } from '@/lib/battle/question-selection'
 import { isBattleAnswerCorrect, resolveBattleOutcome, resolveWinner } from '@/lib/battle/scoring'
 import { serializeBattleQuestions } from '@/lib/battle/serialization'
@@ -359,16 +360,14 @@ export async function createChallenge(input: {
   const expiresAt = new Date(now.getTime() + BATTLE_CHALLENGE_TTL_MS).toISOString()
 
   const { data, error } = await supabase
-    .from('battle_challenges')
-    .insert({
-      challenger_profile_id: input.challengerProfileId,
-      opponent_profile_id: input.opponentProfileId,
-      folder_id: input.folderId,
-      question_count: input.questionCount,
-      time_limit_seconds: input.timeLimitSeconds,
-      expires_at: expiresAt,
+    .rpc('create_battle_challenge_atomic', {
+      p_challenger_profile_id: input.challengerProfileId,
+      p_opponent_profile_id: input.opponentProfileId,
+      p_folder_id: input.folderId,
+      p_question_count: input.questionCount,
+      p_time_limit_seconds: input.timeLimitSeconds,
+      p_expires_at: expiresAt,
     })
-    .select('id,challenger_profile_id,opponent_profile_id,folder_id,question_count,time_limit_seconds,status,created_at,accepted_at,expires_at')
     .single()
 
   if (error) {
@@ -429,6 +428,18 @@ export async function declineChallenge(challengeId: string): Promise<void> {
   const { error } = await supabase
     .from('battle_challenges')
     .update({ status: 'declined' })
+    .eq('id', challengeId)
+
+  if (error) {
+    throw error
+  }
+}
+
+export async function cancelChallenge(challengeId: string): Promise<void> {
+  const supabase = createSupabaseAdminClient()
+  const { error } = await supabase
+    .from('battle_challenges')
+    .update({ status: 'cancelled' })
     .eq('id', challengeId)
 
   if (error) {
@@ -633,8 +644,7 @@ async function buildBattleQuestionSnapshots(matchId: string): Promise<{
 }
 
 function isBattleMatchExpired(match: BattleMatch, now = new Date()): boolean {
-  const expiresAt = new Date(match.startAt).getTime() + match.timeLimitSeconds * 1000
-  return now.getTime() >= expiresAt
+  return isBattleMatchExpiredAt(match.startAt, match.timeLimitSeconds, now)
 }
 
 export async function getCurrentBattleMatchState(profileId: string): Promise<BattleCurrentMatchState | null> {
@@ -780,7 +790,7 @@ export async function submitBattleAnswer(input: {
     if (playerUpdateError) {
       throw playerUpdateError
     }
-  } else if (match.status === 'countdown') {
+  } else if (player.status === 'ready') {
     const { error: playerProgressError } = await supabase
       .from('battle_match_players')
       .update({ status: 'in_progress' })

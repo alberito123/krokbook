@@ -14,6 +14,7 @@ const MIN_NICKNAME_LENGTH = 3
 const MAX_NICKNAME_LENGTH = 24
 const MIN_PIN_LENGTH = 4
 const MAX_PIN_LENGTH = 64
+const BATTLE_NICKNAME_PATTERN = /^[\p{L}\p{N}_ -]+$/u
 
 export function normalizeBattleNickname(input: string): string {
   return input.trim().replace(/\s+/g, ' ')
@@ -26,6 +27,9 @@ export function validateBattleNickname(nickname: string): string | null {
   }
   if (nickname.length > MAX_NICKNAME_LENGTH) {
     return `Nickname must be at most ${MAX_NICKNAME_LENGTH} characters`
+  }
+  if (!BATTLE_NICKNAME_PATTERN.test(nickname)) {
+    return 'Nickname can only contain letters, numbers, spaces, dashes, and underscores'
   }
   return null
 }
@@ -77,7 +81,7 @@ export async function findBattleProfileByNickname(
   const { data, error } = await supabase
     .from('battle_profiles')
     .select('id,nickname,pin_hash,created_at,last_login_at')
-    .ilike('nickname', nickname)
+    .eq('nickname', nickname)
     .limit(1)
     .maybeSingle()
 

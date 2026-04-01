@@ -6,6 +6,8 @@ export { UploadModal } from './UploadModal'
 export { TiptapEditor } from './TiptapEditor'
 export { MobileHeader } from './MobileHeader'
 export { MobileTabBar, type MobileTab } from './MobileTabBar'
+export { BattlePresenceSync } from './BattlePresenceSync'
+export * from './battle'
 
 // UI components
 export * from './ui'

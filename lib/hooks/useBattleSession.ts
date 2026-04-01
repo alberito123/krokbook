@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { normalizeBattleSessionErrorMessage } from '@/lib/battle/runtime'
 import type { BattleProfile } from '@/lib/battle/types'
 import { STORAGE_KEYS } from '@/lib/constants'
 import { getFromStorage, removeFromStorage, setToStorage } from '@/lib/storage'
@@ -54,7 +55,7 @@ export function useBattleSession(): BattleSessionState {
     } catch (nextError) {
       setProfile(null)
       const message = nextError instanceof Error ? nextError.message : 'Failed to load battle session'
-      setError(message === 'Battle session not found' ? null : message)
+      setError(normalizeBattleSessionErrorMessage(message))
     } finally {
       setIsLoading(false)
     }

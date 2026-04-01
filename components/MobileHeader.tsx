@@ -1,13 +1,14 @@
 'use client'
 
 import * as React from 'react'
-import { Menu, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { Menu, X, ChevronDown, ChevronUp, Swords } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 interface MobileHeaderProps {
     folderName?: string
     onMenuClick: () => void
     isSidebarOpen: boolean
+    onBattleClick?: () => void
     isHeaderCollapsed?: boolean
     onToggleHeader?: () => void
 }
@@ -22,6 +23,7 @@ export function MobileHeader({
     folderName,
     onMenuClick,
     isSidebarOpen,
+    onBattleClick,
     isHeaderCollapsed,
     onToggleHeader,
 }: MobileHeaderProps) {
@@ -51,21 +53,34 @@ export function MobileHeader({
                         )}
                     </div>
                 </div>
-                {onToggleHeader && (
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={onToggleHeader}
-                        className="p-2 -mr-2"
-                        aria-label={isHeaderCollapsed ? 'Show controls' : 'Hide controls'}
-                    >
-                        {isHeaderCollapsed ? (
-                            <ChevronDown className="h-5 w-5 text-zinc-500" />
-                        ) : (
-                            <ChevronUp className="h-5 w-5 text-zinc-500" />
-                        )}
-                    </Button>
-                )}
+                <div className="flex items-center gap-1">
+                    {onBattleClick && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={onBattleClick}
+                            className="h-8 gap-1 px-2.5"
+                        >
+                            <Swords className="h-3.5 w-3.5" />
+                            <span className="text-xs font-medium">Battle</span>
+                        </Button>
+                    )}
+                    {onToggleHeader && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={onToggleHeader}
+                            className="p-2 -mr-2"
+                            aria-label={isHeaderCollapsed ? 'Show controls' : 'Hide controls'}
+                        >
+                            {isHeaderCollapsed ? (
+                                <ChevronDown className="h-5 w-5 text-zinc-500" />
+                            ) : (
+                                <ChevronUp className="h-5 w-5 text-zinc-500" />
+                            )}
+                        </Button>
+                    )}
+                </div>
             </div>
         </header>
     )

@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server'
 import { readBattleSessionProfileId } from '@/lib/server/battle-session'
-import { acceptChallenge, findPendingChallengeById, hasActiveBattle } from '@/lib/server/battle-repository'
+import {
+  acceptChallenge,
+  cancelChallenge,
+  findPendingChallengeById,
+  hasActiveBattle,
+  isBattleProfileOnline,
+} from '@/lib/server/battle-repository'
 
 interface RouteContext {
   params: {
@@ -30,13 +36,19 @@ export async function POST(_request: Request, context: RouteContext) {
       return NextResponse.json({ error: 'Challenge has expired' }, { status: 409 })
     }
 
-    const [challengerBusy, opponentBusy] = await Promise.all([
+    const [challengerBusy, opponentBusy, challengerOnline] = await Promise.all([
       hasActiveBattle(challenge.challengerProfileId, { ignoreChallengeId: challenge.id }),
       hasActiveBattle(challenge.opponentProfileId, { ignoreChallengeId: challenge.id }),
+      isBattleProfileOnline(challenge.challengerProfileId),
     ])
 
     if (challengerBusy || opponentBusy) {
       return NextResponse.json({ error: 'One of the players already has an active battle' }, { status: 409 })
+    }
+
+    if (!challengerOnline) {
+      await cancelChallenge(challenge.id)
+      return NextResponse.json({ error: 'The challenger is no longer online' }, { status: 409 })
     }
 
     const match = await acceptChallenge(challenge)

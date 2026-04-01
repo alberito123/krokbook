@@ -344,6 +344,7 @@ function DashboardPageInner() {
         folderName={currentFolderName}
         onMenuClick={handleMenuToggle}
         isSidebarOpen={isSidebarOpen}
+        onBattleClick={() => router.push('/battle')}
         isHeaderCollapsed={isHeaderCollapsed}
         onToggleHeader={() => setIsHeaderCollapsed(prev => !prev)}
       />
@@ -356,6 +357,7 @@ function DashboardPageInner() {
         onFolderDelete={handleFolderDelete}
         onUploadClick={handleUploadClick}
         onErrorHubClick={handleErrorHubClick}
+        onBattleClick={() => router.push('/battle')}
         isMobileOpen={isSidebarOpen}
         onMobileClose={handleSidebarClose}
         isDesktopCollapsed={isSidebarCollapsed}

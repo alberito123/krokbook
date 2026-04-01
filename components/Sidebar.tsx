@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Upload, AlertCircle, FolderOpen, Trash2, X } from 'lucide-react'
+import { Upload, AlertCircle, FolderOpen, Swords, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { Folder } from '@/lib/types'
 
@@ -46,6 +46,7 @@ export interface SidebarProps {
   onFolderDelete: (folderId: string) => void
   onUploadClick: () => void
   onErrorHubClick: () => void
+  onBattleClick?: () => void
   isMobileOpen?: boolean
   onMobileClose?: () => void
   isDesktopCollapsed?: boolean
@@ -72,6 +73,7 @@ export function Sidebar({
   onFolderDelete,
   onUploadClick,
   onErrorHubClick,
+  onBattleClick,
   isMobileOpen = false,
   onMobileClose,
   isDesktopCollapsed = false,
@@ -115,6 +117,11 @@ export function Sidebar({
 
   const handleErrorHubClickWithClose = () => {
     onErrorHubClick()
+    onMobileClose?.()
+  }
+
+  const handleBattleClickWithClose = () => {
+    onBattleClick?.()
     onMobileClose?.()
   }
 
@@ -172,6 +179,17 @@ export function Sidebar({
             <AlertCircle className="h-4 w-4 mr-2" />
             Error Hub
           </Button>
+
+          {onBattleClick && (
+            <Button
+              onClick={handleBattleClickWithClose}
+              className="w-full justify-start"
+              variant="outline"
+            >
+              <Swords className="h-4 w-4 mr-2" />
+              Battle
+            </Button>
+          )}
         </div>
 
         {/* Folders List */}
