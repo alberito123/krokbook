@@ -1,5 +1,13 @@
-import type { BattleChallenge, BattleLobbyState, BattleMatch, BattlePresence, BattleProfile } from '@/lib/battle/types'
+import type {
+  BattleChallenge,
+  BattleLobbyState,
+  BattleMatch,
+  BattlePresence,
+  BattleProfile,
+} from '@/lib/battle/types'
 import { BATTLE_CHALLENGE_TTL_MS, BATTLE_PRESENCE_TTL_MS } from '@/lib/battle/constants'
+import { createBattleQuestionSelection } from '@/lib/battle/question-selection'
+import type { Question } from '@/lib/types'
 import { createSupabaseAdminClient } from './supabase-admin'
 import { mapBattleProfile } from './battle-auth'
 
@@ -34,6 +42,23 @@ interface BattleMatchRow {
   end_at: string | null
   winner_profile_id: string | null
   created_at: string
+}
+
+interface FolderRow {
+  id: string
+}
+
+interface QuestionRow {
+  id: string
+  folder_id: string
+  question_text: string
+  answer_options: string[]
+  correct_answer_index: number
+  source_file: string | null
+}
+
+interface BattleMatchPlayerRow {
+  match_id: string
 }
 
 interface BattlePresenceRow {
@@ -213,5 +238,225 @@ export async function getBattleLobbyState(
     incomingChallenges: activeChallenges.incomingChallenges,
     outgoingChallenges: activeChallenges.outgoingChallenges,
     activeMatch,
+  }
+}
+
+function mapQuestion(row: QuestionRow): Question {
+  return {
+    id: row.id,
+    folderId: row.folder_id,
+    questionText: row.question_text,
+    answerOptions: row.answer_options,
+    correctAnswerIndex: row.correct_answer_index,
+    sourceFile: row.source_file ?? undefined,
+  }
+}
+
+export async function hasActiveBattle(
+  profileId: string,
+  options: { now?: Date; ignoreChallengeId?: string } = {}
+): Promise<boolean> {
+  const supabase = createSupabaseAdminClient()
+  const now = options.now ?? new Date()
+  const nowIso = now.toISOString()
+
+  let challengeQuery = supabase
+    .from('battle_challenges')
+    .select('id')
+    .eq('status', 'pending')
+    .gt('expires_at', nowIso)
+    .or(`challenger_profile_id.eq.${profileId},opponent_profile_id.eq.${profileId}`)
+    .limit(1)
+
+  if (options.ignoreChallengeId) {
+    challengeQuery = challengeQuery.neq('id', options.ignoreChallengeId)
+  }
+
+  const { data: challengeRows, error: challengeError } = await challengeQuery
+
+  if (challengeError) {
+    throw challengeError
+  }
+
+  if ((challengeRows ?? []).length > 0) {
+    return true
+  }
+
+  const activeMatch = await findActiveBattleMatch(profileId)
+  return activeMatch !== null
+}
+
+export async function createChallenge(input: {
+  challengerProfileId: string
+  opponentProfileId: string
+  folderId: string
+  questionCount: number
+  timeLimitSeconds: number
+  now?: Date
+}): Promise<BattleChallenge> {
+  const supabase = createSupabaseAdminClient()
+  const now = input.now ?? new Date()
+  const expiresAt = new Date(now.getTime() + BATTLE_CHALLENGE_TTL_MS).toISOString()
+
+  const { data, error } = await supabase
+    .from('battle_challenges')
+    .insert({
+      challenger_profile_id: input.challengerProfileId,
+      opponent_profile_id: input.opponentProfileId,
+      folder_id: input.folderId,
+      question_count: input.questionCount,
+      time_limit_seconds: input.timeLimitSeconds,
+      expires_at: expiresAt,
+    })
+    .select('id,challenger_profile_id,opponent_profile_id,folder_id,question_count,time_limit_seconds,status,created_at,accepted_at,expires_at')
+    .single()
+
+  if (error) {
+    throw error
+  }
+
+  return mapBattleChallenge(data as BattleChallengeRow)
+}
+
+export async function findFolder(folderId: string): Promise<FolderRow | null> {
+  const supabase = createSupabaseAdminClient()
+  const { data, error } = await supabase
+    .from('folders')
+    .select('id')
+    .eq('id', folderId)
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  return data as FolderRow | null
+}
+
+export async function listQuestionsForFolder(folderId: string): Promise<Question[]> {
+  const supabase = createSupabaseAdminClient()
+  const { data, error } = await supabase
+    .from('questions')
+    .select('id,folder_id,question_text,answer_options,correct_answer_index,source_file')
+    .eq('folder_id', folderId)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    throw error
+  }
+
+  return (data as QuestionRow[]).map(mapQuestion)
+}
+
+export async function findPendingChallengeById(challengeId: string): Promise<BattleChallenge | null> {
+  const supabase = createSupabaseAdminClient()
+  const { data, error } = await supabase
+    .from('battle_challenges')
+    .select('id,challenger_profile_id,opponent_profile_id,folder_id,question_count,time_limit_seconds,status,created_at,accepted_at,expires_at')
+    .eq('id', challengeId)
+    .eq('status', 'pending')
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  return data ? mapBattleChallenge(data as BattleChallengeRow) : null
+}
+
+export async function declineChallenge(challengeId: string): Promise<void> {
+  const supabase = createSupabaseAdminClient()
+  const { error } = await supabase
+    .from('battle_challenges')
+    .update({ status: 'declined' })
+    .eq('id', challengeId)
+
+  if (error) {
+    throw error
+  }
+}
+
+export async function acceptChallenge(challenge: BattleChallenge, now = new Date()): Promise<BattleMatch> {
+  const supabase = createSupabaseAdminClient()
+  const questions = await listQuestionsForFolder(challenge.folderId)
+  const { snapshots } = createBattleQuestionSelection(questions, {
+    questionCount: challenge.questionCount,
+  })
+  const startAt = new Date(now.getTime() + 5_000).toISOString()
+  let matchId: string | null = null
+
+  try {
+    const { data: matchData, error: matchError } = await supabase
+      .from('battle_matches')
+      .insert({
+        challenge_id: challenge.id,
+        folder_id: challenge.folderId,
+        question_count: challenge.questionCount,
+        time_limit_seconds: challenge.timeLimitSeconds,
+        status: 'countdown',
+        start_at: startAt,
+      })
+      .select('id,challenge_id,folder_id,question_count,time_limit_seconds,status,start_at,end_at,winner_profile_id,created_at')
+      .single()
+
+    if (matchError) {
+      throw matchError
+    }
+
+    const match = mapBattleMatch(matchData as BattleMatchRow)
+    matchId = match.id
+
+    const { error: playersError } = await supabase
+      .from('battle_match_players')
+      .insert([
+        {
+          match_id: match.id,
+          profile_id: challenge.challengerProfileId,
+          status: 'ready',
+        },
+        {
+          match_id: match.id,
+          profile_id: challenge.opponentProfileId,
+          status: 'ready',
+        },
+      ])
+
+    if (playersError) {
+      throw playersError
+    }
+
+    const { error: questionsError } = await supabase
+      .from('battle_match_questions')
+      .insert(
+        snapshots.map(snapshot => ({
+          match_id: match.id,
+          question_id: snapshot.questionId,
+          position: snapshot.position,
+          answer_order: snapshot.answerOrder,
+        }))
+      )
+
+    if (questionsError) {
+      throw questionsError
+    }
+
+    const { error: challengeError } = await supabase
+      .from('battle_challenges')
+      .update({
+        status: 'accepted',
+        accepted_at: now.toISOString(),
+      })
+      .eq('id', challenge.id)
+
+    if (challengeError) {
+      throw challengeError
+    }
+
+    return match
+  } catch (error) {
+    if (matchId) {
+      await supabase.from('battle_matches').delete().eq('id', matchId)
+    }
+    throw error
   }
 }
