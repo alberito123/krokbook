@@ -18,6 +18,7 @@ import { serializeBattleQuestions } from '@/lib/battle/serialization'
 import type { Question } from '@/lib/types'
 import { createSupabaseAdminClient } from './supabase-admin'
 import { mapBattleProfile } from './battle-auth'
+import { isSupabaseUniqueViolation } from './battle-persistence-errors'
 
 interface BattleProfileRow {
   id: string
@@ -408,12 +409,16 @@ export async function listQuestionsForFolder(folderId: string): Promise<Question
 }
 
 export async function findPendingChallengeById(challengeId: string): Promise<BattleChallenge | null> {
+  const challenge = await findBattleChallengeById(challengeId)
+  return challenge?.status === 'pending' ? challenge : null
+}
+
+export async function findBattleChallengeById(challengeId: string): Promise<BattleChallenge | null> {
   const supabase = createSupabaseAdminClient()
   const { data, error } = await supabase
     .from('battle_challenges')
     .select('id,challenger_profile_id,opponent_profile_id,folder_id,question_count,time_limit_seconds,status,created_at,accepted_at,expires_at')
     .eq('id', challengeId)
-    .eq('status', 'pending')
     .maybeSingle()
 
   if (error) {
@@ -471,6 +476,13 @@ export async function acceptChallenge(challenge: BattleChallenge, now = new Date
       .single()
 
     if (matchError) {
+      if (isSupabaseUniqueViolation(matchError, 'battle_matches_challenge_id_key')) {
+        const existingMatch = await findBattleMatchByChallengeId(challenge.id)
+        if (existingMatch) {
+          return existingMatch
+        }
+      }
+
       throw matchError
     }
 
@@ -549,6 +561,21 @@ async function findBattleMatchById(matchId: string): Promise<BattleMatch | null>
     .from('battle_matches')
     .select('id,challenge_id,folder_id,question_count,time_limit_seconds,status,start_at,end_at,winner_profile_id,created_at')
     .eq('id', matchId)
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  return data ? mapBattleMatch(data as BattleMatchRow) : null
+}
+
+export async function findBattleMatchByChallengeId(challengeId: string): Promise<BattleMatch | null> {
+  const supabase = createSupabaseAdminClient()
+  const { data, error } = await supabase
+    .from('battle_matches')
+    .select('id,challenge_id,folder_id,question_count,time_limit_seconds,status,start_at,end_at,winner_profile_id,created_at')
+    .eq('challenge_id', challengeId)
     .maybeSingle()
 
   if (error) {
@@ -763,6 +790,10 @@ export async function submitBattleAnswer(input: {
     })
 
   if (insertError) {
+    if (isSupabaseUniqueViolation(insertError, 'battle_match_answers_match_profile_question_unique')) {
+      throw new Error('Battle answer already submitted')
+    }
+
     throw insertError
   }
 

@@ -6,6 +6,7 @@ import {
   validateBattleNickname,
   validateBattlePin,
 } from '@/lib/server/battle-auth'
+import { isSupabaseUniqueViolation } from '@/lib/server/battle-persistence-errors'
 import { setBattleSession } from '@/lib/server/battle-session'
 
 export async function POST(request: Request) {
@@ -34,6 +35,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ profile }, { status: 201 })
   } catch (error) {
+    if (isSupabaseUniqueViolation(error, 'battle_profiles_nickname_idx')) {
+      return NextResponse.json({ error: 'Nickname is already taken' }, { status: 409 })
+    }
+
     console.error('Failed to create battle profile:', error)
     return NextResponse.json({ error: 'Failed to create battle profile' }, { status: 500 })
   }

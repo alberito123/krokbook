@@ -3,7 +3,8 @@ import { readBattleSessionProfileId } from '@/lib/server/battle-session'
 import {
   acceptChallenge,
   cancelChallenge,
-  findPendingChallengeById,
+  findBattleChallengeById,
+  findBattleMatchByChallengeId,
   hasActiveBattle,
   isBattleProfileOnline,
 } from '@/lib/server/battle-repository'
@@ -23,13 +24,26 @@ export async function POST(_request: Request, context: RouteContext) {
   const challengeId = context.params.challengeId
 
   try {
-    const challenge = await findPendingChallengeById(challengeId)
+    const challenge = await findBattleChallengeById(challengeId)
     if (!challenge) {
       return NextResponse.json({ error: 'Challenge not found' }, { status: 404 })
     }
 
     if (challenge.opponentProfileId !== profileId) {
       return NextResponse.json({ error: 'Only the challenged player can accept this challenge' }, { status: 403 })
+    }
+
+    if (challenge.status === 'accepted') {
+      const match = await findBattleMatchByChallengeId(challenge.id)
+      if (match) {
+        return NextResponse.json({ match })
+      }
+
+      return NextResponse.json({ error: 'Challenge has already been accepted' }, { status: 409 })
+    }
+
+    if (challenge.status !== 'pending') {
+      return NextResponse.json({ error: 'Challenge is no longer available' }, { status: 409 })
     }
 
     if (new Date(challenge.expiresAt).getTime() <= Date.now()) {
