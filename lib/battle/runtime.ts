@@ -144,3 +144,23 @@ export function buildBattleResultQuestions(input: {
       }
     })
 }
+
+export function getInitialBattleResultQuestionId(
+  questions: BattleResultQuestionView[]
+): string | null {
+  if (questions.length === 0) {
+    return null
+  }
+
+  const firstIncorrectQuestion = questions.find(question => question.selfAnswer?.isCorrect === false)
+  if (firstIncorrectQuestion) {
+    return firstIncorrectQuestion.questionId
+  }
+
+  const firstCorrectQuestion = questions.find(question => question.selfAnswer?.isCorrect === true)
+  if (firstCorrectQuestion) {
+    return firstCorrectQuestion.questionId
+  }
+
+  return questions[0]?.questionId ?? null
+}

@@ -3,6 +3,7 @@ import test from 'node:test'
 import {
   applyOptimisticBattleAnswer,
   buildBattleResultQuestions,
+  getInitialBattleResultQuestionId,
   isBattleMatchExpiredAt,
   isBattlePresenceActive,
   normalizeBattleSessionErrorMessage,
@@ -229,4 +230,63 @@ test('buildBattleResultQuestions maps both players answers onto readable review 
   assert.equal(resultQuestions[1]?.questionId, 'question-2')
   assert.equal(resultQuestions[1]?.selfAnswer, null)
   assert.equal(resultQuestions[1]?.opponentAnswer?.isCorrect, true)
+})
+
+test('getInitialBattleResultQuestionId prefers the first incorrect answer', () => {
+  const questionId = getInitialBattleResultQuestionId([
+    {
+      questionId: 'question-1',
+      position: 0,
+      questionText: 'Q1',
+      answerOptions: ['A', 'B'],
+      correctIndex: 0,
+      correctOption: 'A',
+      selfAnswer: {
+        selectedIndex: 0,
+        selectedOption: 'A',
+        isCorrect: true,
+        answeredAt: '2026-04-02T10:00:00.000Z',
+      },
+      opponentAnswer: null,
+    },
+    {
+      questionId: 'question-2',
+      position: 1,
+      questionText: 'Q2',
+      answerOptions: ['A', 'B'],
+      correctIndex: 1,
+      correctOption: 'B',
+      selfAnswer: {
+        selectedIndex: 0,
+        selectedOption: 'A',
+        isCorrect: false,
+        answeredAt: '2026-04-02T10:00:10.000Z',
+      },
+      opponentAnswer: null,
+    },
+  ])
+
+  assert.equal(questionId, 'question-2')
+})
+
+test('getInitialBattleResultQuestionId falls back to the first correct answer', () => {
+  const questionId = getInitialBattleResultQuestionId([
+    {
+      questionId: 'question-1',
+      position: 0,
+      questionText: 'Q1',
+      answerOptions: ['A', 'B'],
+      correctIndex: 0,
+      correctOption: 'A',
+      selfAnswer: {
+        selectedIndex: 0,
+        selectedOption: 'A',
+        isCorrect: true,
+        answeredAt: '2026-04-02T10:00:00.000Z',
+      },
+      opponentAnswer: null,
+    },
+  ])
+
+  assert.equal(questionId, 'question-1')
 })
