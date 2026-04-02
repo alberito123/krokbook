@@ -1,5 +1,10 @@
 import { BATTLE_PRESENCE_TTL_MS } from './constants'
-import type { BattleCurrentMatchState } from './types'
+import type {
+  BattleCurrentMatchState,
+  BattleResultAnswerEntry,
+  BattleResultQuestionAnswerView,
+  BattleResultQuestionView,
+} from './types'
 
 export function normalizeBattleSessionErrorMessage(
   message: string | null | undefined
@@ -93,4 +98,49 @@ export function applyOptimisticBattleAnswer(
           : matchState.selfProgress.status,
     },
   }
+}
+
+function buildBattleResultAnswerView(
+  answer: BattleResultAnswerEntry | undefined,
+  answerOptions: string[]
+): BattleResultQuestionAnswerView | null {
+  if (!answer) {
+    return null
+  }
+
+  return {
+    selectedIndex: answer.selectedIndex,
+    selectedOption: answerOptions[answer.selectedIndex] ?? null,
+    isCorrect: answer.isCorrect,
+    answeredAt: answer.answeredAt,
+  }
+}
+
+export function buildBattleResultQuestions(input: {
+  questions: Array<Omit<BattleResultQuestionView, 'selfAnswer' | 'opponentAnswer' | 'correctOption'>>
+  answers: BattleResultAnswerEntry[]
+  selfProfileId: string
+  opponentProfileId: string
+}): BattleResultQuestionView[] {
+  const answersByQuestionId = input.answers.reduce<Map<string, BattleResultAnswerEntry[]>>((map, answer) => {
+    const existingAnswers = map.get(answer.questionId) ?? []
+    existingAnswers.push(answer)
+    map.set(answer.questionId, existingAnswers)
+    return map
+  }, new Map())
+
+  return [...input.questions]
+    .sort((left, right) => left.position - right.position)
+    .map(question => {
+      const questionAnswers = answersByQuestionId.get(question.questionId) ?? []
+      const selfAnswer = questionAnswers.find(answer => answer.profileId === input.selfProfileId)
+      const opponentAnswer = questionAnswers.find(answer => answer.profileId === input.opponentProfileId)
+
+      return {
+        ...question,
+        correctOption: question.answerOptions[question.correctIndex] ?? null,
+        selfAnswer: buildBattleResultAnswerView(selfAnswer, question.answerOptions),
+        opponentAnswer: buildBattleResultAnswerView(opponentAnswer, question.answerOptions),
+      }
+    })
 }

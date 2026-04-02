@@ -2,12 +2,13 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   applyOptimisticBattleAnswer,
+  buildBattleResultQuestions,
   isBattleMatchExpiredAt,
   isBattlePresenceActive,
   normalizeBattleSessionErrorMessage,
   resolveBattleMatchRefreshState,
 } from '../../lib/battle/runtime'
-import type { BattleCurrentMatchState } from '../../lib/battle/types'
+import type { BattleCurrentMatchState, BattleResultQuestionView } from '../../lib/battle/types'
 
 test('normalizeBattleSessionErrorMessage treats missing session as idle state', () => {
   assert.equal(normalizeBattleSessionErrorMessage('Battle session not found'), null)
@@ -171,4 +172,61 @@ test('applyOptimisticBattleAnswer marks the final answer as finished', () => {
   assert.equal(nextState?.selfProgress.status, 'finished')
   assert.equal(nextState?.self.status, 'finished')
   assert.ok(nextState?.self.finishedAt)
+})
+
+test('buildBattleResultQuestions maps both players answers onto readable review cards', () => {
+  const questions: Array<Omit<BattleResultQuestionView, 'selfAnswer' | 'opponentAnswer' | 'correctOption'>> = [
+    {
+      questionId: 'question-2',
+      position: 1,
+      questionText: 'Second question',
+      sourceFile: 'set-a.docx',
+      answerOptions: ['A2', 'B2', 'C2'],
+      correctIndex: 2,
+    },
+    {
+      questionId: 'question-1',
+      position: 0,
+      questionText: 'First question',
+      answerOptions: ['A1', 'B1', 'C1'],
+      correctIndex: 1,
+    },
+  ]
+
+  const resultQuestions = buildBattleResultQuestions({
+    questions,
+    answers: [
+      {
+        questionId: 'question-1',
+        profileId: 'self',
+        selectedIndex: 1,
+        isCorrect: true,
+        answeredAt: '2026-04-02T10:00:10.000Z',
+      },
+      {
+        questionId: 'question-1',
+        profileId: 'opponent',
+        selectedIndex: 0,
+        isCorrect: false,
+        answeredAt: '2026-04-02T10:00:14.000Z',
+      },
+      {
+        questionId: 'question-2',
+        profileId: 'opponent',
+        selectedIndex: 2,
+        isCorrect: true,
+        answeredAt: '2026-04-02T10:00:20.000Z',
+      },
+    ],
+    selfProfileId: 'self',
+    opponentProfileId: 'opponent',
+  })
+
+  assert.equal(resultQuestions[0]?.questionId, 'question-1')
+  assert.equal(resultQuestions[0]?.correctOption, 'B1')
+  assert.equal(resultQuestions[0]?.selfAnswer?.selectedOption, 'B1')
+  assert.equal(resultQuestions[0]?.opponentAnswer?.selectedOption, 'A1')
+  assert.equal(resultQuestions[1]?.questionId, 'question-2')
+  assert.equal(resultQuestions[1]?.selfAnswer, null)
+  assert.equal(resultQuestions[1]?.opponentAnswer?.isCorrect, true)
 })

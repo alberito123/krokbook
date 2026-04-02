@@ -6,12 +6,13 @@ import type {
   BattleMatchPlayer,
   BattlePresence,
   BattleProfile,
+  BattleResultAnswerEntry,
   BattleQuestionSnapshot,
   BattleQuestionView,
   BattleResultView,
 } from '@/lib/battle/types'
 import { BATTLE_CHALLENGE_TTL_MS, BATTLE_PRESENCE_TTL_MS } from '@/lib/battle/constants'
-import { isBattleMatchExpiredAt } from '@/lib/battle/runtime'
+import { buildBattleResultQuestions, isBattleMatchExpiredAt } from '@/lib/battle/runtime'
 import { createBattleQuestionSelection } from '@/lib/battle/question-selection'
 import { isBattleAnswerCorrect, resolveBattleOutcome, resolveWinner } from '@/lib/battle/scoring'
 import { serializeBattleQuestions } from '@/lib/battle/serialization'
@@ -86,7 +87,9 @@ interface BattleMatchQuestionRow {
 interface BattleMatchAnswerRow {
   match_question_id: string
   profile_id: string
+  selected_index: number
   is_correct: boolean
+  answered_at: string
 }
 
 interface BattlePresenceRow {
@@ -618,7 +621,7 @@ async function listBattleMatchAnswers(matchId: string): Promise<BattleMatchAnswe
   const supabase = createSupabaseAdminClient()
   const { data, error } = await supabase
     .from('battle_match_answers')
-    .select('match_question_id,profile_id,is_correct')
+    .select('match_question_id,profile_id,selected_index,is_correct,answered_at')
     .eq('match_id', matchId)
 
   if (error) {
@@ -951,10 +954,49 @@ export async function getBattleResult(matchId: string, profileId: string): Promi
     throw new Error('Battle match players are inconsistent')
   }
 
+  const [answers, snapshotData] = await Promise.all([
+    listBattleMatchAnswers(finalMatch.id),
+    buildBattleQuestionSnapshots(finalMatch.id),
+  ])
+
+  const questionIdByMatchQuestionId = new Map(
+    snapshotData.matchQuestions.map(question => [question.id, question.question_id] as const)
+  )
+
+  const reviewAnswers: BattleResultAnswerEntry[] = answers.flatMap(answer => {
+    const questionId = questionIdByMatchQuestionId.get(answer.match_question_id)
+    if (!questionId) {
+      return []
+    }
+
+    return [{
+      questionId,
+      profileId: answer.profile_id,
+      selectedIndex: answer.selected_index,
+      isCorrect: answer.is_correct,
+      answeredAt: answer.answered_at,
+    }]
+  })
+
+  const reviewQuestions = buildBattleResultQuestions({
+    questions: snapshotData.snapshots.map(snapshot => ({
+      questionId: snapshot.questionId,
+      position: snapshot.position,
+      questionText: snapshot.questionText,
+      sourceFile: snapshot.sourceFile,
+      answerOptions: snapshot.answerOrder.map(index => snapshot.answerOptions[index]),
+      correctIndex: snapshot.answerOrder.indexOf(snapshot.correctAnswerIndex),
+    })),
+    answers: reviewAnswers,
+    selfProfileId: finalSelf.profileId,
+    opponentProfileId: finalOpponent.profileId,
+  })
+
   return {
     matchId: finalMatch.id,
     outcome: resolveBattleOutcome(finalSelf.score, finalOpponent.score),
     selfScore: finalSelf.score,
     opponentScore: finalOpponent.score,
+    questions: reviewQuestions,
   }
 }

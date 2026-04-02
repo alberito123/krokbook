@@ -78,6 +78,29 @@ export interface BattleAnswerRecord {
   answeredAt: string
 }
 
+export interface BattleResultAnswerEntry extends BattleAnswerRecord {
+  profileId: string
+}
+
+export interface BattleResultQuestionAnswerView {
+  selectedIndex: number
+  selectedOption: string | null
+  isCorrect: boolean
+  answeredAt: string
+}
+
+export interface BattleResultQuestionView {
+  questionId: string
+  position: number
+  questionText: string
+  sourceFile?: string
+  answerOptions: string[]
+  correctIndex: number
+  correctOption: string | null
+  selfAnswer: BattleResultQuestionAnswerView | null
+  opponentAnswer: BattleResultQuestionAnswerView | null
+}
+
 export interface BattleLobbyState {
   profile: BattleProfile
   onlineProfiles: BattleProfile[]
@@ -91,6 +114,7 @@ export interface BattleResultView {
   outcome: BattleResultOutcome
   selfScore: number
   opponentScore: number
+  questions: BattleResultQuestionView[]
 }
 
 export interface BattleQuestionSelectionOptions {
