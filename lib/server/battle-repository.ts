@@ -11,7 +11,11 @@ import type {
   BattleQuestionView,
   BattleResultView,
 } from '@/lib/battle/types'
-import { BATTLE_CHALLENGE_TTL_MS, BATTLE_PRESENCE_TTL_MS } from '@/lib/battle/constants'
+import {
+  BATTLE_CHALLENGE_TTL_MS,
+  BATTLE_COUNTDOWN_SECONDS,
+  BATTLE_PRESENCE_TTL_MS,
+} from '@/lib/battle/constants'
 import { buildBattleResultQuestions, isBattleMatchExpiredAt } from '@/lib/battle/runtime'
 import { createBattleQuestionSelection } from '@/lib/battle/question-selection'
 import { isBattleAnswerCorrect, resolveBattleOutcome, resolveWinner } from '@/lib/battle/scoring'
@@ -461,7 +465,7 @@ export async function acceptChallenge(challenge: BattleChallenge, now = new Date
   const { snapshots } = createBattleQuestionSelection(questions, {
     questionCount: challenge.questionCount,
   })
-  const startAt = new Date(now.getTime() + 5_000).toISOString()
+  const startAt = new Date(now.getTime() + BATTLE_COUNTDOWN_SECONDS * 1000).toISOString()
   let matchId: string | null = null
 
   try {
