@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui'
 import { processFiles, parseDocxTableHtml, isHtmlContent } from '@/lib/fileProcessor'
 import { parseRawText } from '@/lib/parser'
 import { useStore } from '@/lib/store'
@@ -276,19 +277,20 @@ export function UploadModal({
           {folderMode === 'existing' && (
             <div>
               <Label htmlFor="existingFolder">Select Folder</Label>
-              <select
-                id="existingFolder"
-                value={selectedFolderId}
-                onChange={(e) => setSelectedFolderId(e.target.value)}
-                className="mt-1 w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-2"
-              >
-                <option value="">Select a folder...</option>
-                {folders.map((folder) => (
-                  <option key={folder.id} value={folder.id}>
-                    {folder.name}
-                  </option>
-                ))}
-              </select>
+              <div className="mt-1">
+                <Select value={selectedFolderId} onValueChange={setSelectedFolderId}>
+                  <SelectTrigger id="existingFolder">
+                    <SelectValue placeholder="Select a folder..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {folders.map((folder) => (
+                      <SelectItem key={folder.id} value={folder.id}>
+                        {folder.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           )}
 

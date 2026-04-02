@@ -36,14 +36,16 @@ export function useBattleLobby(isEnabled = true): BattleLobbyHookState {
   const [isLoading, setIsLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
 
-  const refreshLobby = React.useCallback(async () => {
+  const refreshLobbyInternal = React.useCallback(async (options?: { silent?: boolean }) => {
     if (!isEnabled) {
       setLobbyState(null)
       setIsLoading(false)
       return
     }
 
-    setIsLoading(true)
+    if (!options?.silent) {
+      setIsLoading(true)
+    }
     try {
       const data = await readJson<BattleLobbyState>(
         await fetch('/api/battle/lobby', { credentials: 'include' })
@@ -54,22 +56,28 @@ export function useBattleLobby(isEnabled = true): BattleLobbyHookState {
       setError(nextError instanceof Error ? nextError.message : 'Failed to load battle lobby')
       throw nextError
     } finally {
-      setIsLoading(false)
+      if (!options?.silent) {
+        setIsLoading(false)
+      }
     }
   }, [isEnabled])
 
+  const refreshLobby = React.useCallback(async () => {
+    await refreshLobbyInternal()
+  }, [refreshLobbyInternal])
+
   React.useEffect(() => {
     if (!isEnabled) return
-    refreshLobby().catch(() => undefined)
+    refreshLobbyInternal().catch(() => undefined)
 
     const refreshId = window.setInterval(() => {
-      refreshLobby().catch(() => undefined)
+      refreshLobbyInternal({ silent: true }).catch(() => undefined)
     }, LOBBY_POLL_INTERVAL_MS)
 
     return () => {
       window.clearInterval(refreshId)
     }
-  }, [isEnabled, refreshLobby])
+  }, [isEnabled, refreshLobbyInternal])
 
   const createChallenge = React.useCallback(async (input: CreateBattleChallengeInput) => {
     const data = await readJson<{ challenge: BattleChallenge }>(
@@ -81,9 +89,9 @@ export function useBattleLobby(isEnabled = true): BattleLobbyHookState {
       })
     )
 
-    await refreshLobby()
+    await refreshLobbyInternal({ silent: true })
     return data.challenge
-  }, [refreshLobby])
+  }, [refreshLobbyInternal])
 
   const acceptChallenge = React.useCallback(async (challengeId: string) => {
     await readJson<{ ok?: true }>(
@@ -92,8 +100,8 @@ export function useBattleLobby(isEnabled = true): BattleLobbyHookState {
         credentials: 'include',
       })
     )
-    await refreshLobby()
-  }, [refreshLobby])
+    await refreshLobbyInternal({ silent: true })
+  }, [refreshLobbyInternal])
 
   const declineChallenge = React.useCallback(async (challengeId: string) => {
     await readJson<{ ok: true }>(
@@ -102,8 +110,8 @@ export function useBattleLobby(isEnabled = true): BattleLobbyHookState {
         credentials: 'include',
       })
     )
-    await refreshLobby()
-  }, [refreshLobby])
+    await refreshLobbyInternal({ silent: true })
+  }, [refreshLobbyInternal])
 
   return {
     lobbyState,

@@ -9,6 +9,7 @@ interface MobileHeaderProps {
     onMenuClick: () => void
     isSidebarOpen: boolean
     onBattleClick?: () => void
+    isBattleActive?: boolean
     isHeaderCollapsed?: boolean
     onToggleHeader?: () => void
 }
@@ -24,6 +25,7 @@ export function MobileHeader({
     onMenuClick,
     isSidebarOpen,
     onBattleClick,
+    isBattleActive = false,
     isHeaderCollapsed,
     onToggleHeader,
 }: MobileHeaderProps) {
@@ -56,7 +58,7 @@ export function MobileHeader({
                 <div className="flex items-center gap-1">
                     {onBattleClick && (
                         <Button
-                            variant="outline"
+                            variant={isBattleActive ? 'default' : 'outline'}
                             size="sm"
                             onClick={onBattleClick}
                             className="h-8 gap-1 px-2.5"

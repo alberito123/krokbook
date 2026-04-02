@@ -1,4 +1,5 @@
 import { BATTLE_PRESENCE_TTL_MS } from './constants'
+import type { BattleCurrentMatchState } from './types'
 
 export function normalizeBattleSessionErrorMessage(
   message: string | null | undefined
@@ -41,4 +42,55 @@ export function isBattleMatchExpiredAt(
   now = new Date()
 ): boolean {
   return now.getTime() >= new Date(startAt).getTime() + timeLimitSeconds * 1000
+}
+
+export function applyOptimisticBattleAnswer(
+  matchState: BattleCurrentMatchState | null,
+  questionId: string
+): BattleCurrentMatchState | null {
+  if (!matchState) {
+    return null
+  }
+
+  const currentQuestionIndex = Math.min(
+    matchState.selfProgress.answeredCount,
+    Math.max(matchState.questions.length - 1, 0)
+  )
+  const currentQuestion = matchState.questions[currentQuestionIndex]
+
+  if (!currentQuestion || currentQuestion.questionId !== questionId) {
+    return matchState
+  }
+
+  const nextAnsweredCount = Math.min(
+    matchState.selfProgress.answeredCount + 1,
+    matchState.selfProgress.totalQuestions
+  )
+  const hasAnsweredAllQuestions = nextAnsweredCount >= matchState.selfProgress.totalQuestions
+
+  return {
+    ...matchState,
+    match: {
+      ...matchState.match,
+      status: matchState.match.status === 'countdown' ? 'in_progress' : matchState.match.status,
+    },
+    self: {
+      ...matchState.self,
+      status: hasAnsweredAllQuestions
+        ? 'finished'
+        : matchState.self.status === 'ready'
+          ? 'in_progress'
+          : matchState.self.status,
+      finishedAt: hasAnsweredAllQuestions ? new Date().toISOString() : matchState.self.finishedAt,
+    },
+    selfProgress: {
+      ...matchState.selfProgress,
+      answeredCount: nextAnsweredCount,
+      status: hasAnsweredAllQuestions
+        ? 'finished'
+        : matchState.selfProgress.status === 'ready'
+          ? 'in_progress'
+          : matchState.selfProgress.status,
+    },
+  }
 }

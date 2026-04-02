@@ -7,6 +7,13 @@ import type { Folder } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui'
 
 interface BattleChallengeDialogProps {
   isOpen: boolean
@@ -73,15 +80,15 @@ export function BattleChallengeDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
 
-      <div className="relative w-full max-w-lg rounded-2xl border border-zinc-200 bg-white shadow-2xl">
+      <div className="relative w-full max-w-md rounded-3xl border border-zinc-200 bg-white shadow-2xl">
         <div className="flex items-start justify-between border-b border-zinc-200 px-5 py-4">
           <div>
             <h2 className="text-lg font-semibold text-zinc-950">Create challenge</h2>
             <p className="mt-1 text-sm text-zinc-500">
-              Pick one online student, one folder, one timed format.
+              Pick one opponent, one folder, and one timer.
             </p>
           </div>
           <Button variant="ghost" size="sm" onClick={onClose} className="p-2">
@@ -92,39 +99,37 @@ export function BattleChallengeDialog({
         <div className="space-y-4 px-5 py-5">
           <div className="space-y-2">
             <Label htmlFor="battle-opponent">Opponent</Label>
-            <select
-              id="battle-opponent"
-              value={opponentProfileId}
-              onChange={(event) => setOpponentProfileId(event.target.value)}
-              className="h-10 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-950 focus:ring-offset-2"
-            >
-              <option value="">Choose an online student...</option>
-              {onlineProfiles.map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profile.nickname}
-                </option>
-              ))}
-            </select>
+            <Select value={opponentProfileId} onValueChange={setOpponentProfileId}>
+              <SelectTrigger id="battle-opponent">
+                <SelectValue placeholder="Choose an online student..." />
+              </SelectTrigger>
+              <SelectContent>
+                {onlineProfiles.map((profile) => (
+                  <SelectItem key={profile.id} value={profile.id}>
+                    {profile.nickname}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="battle-folder">Folder</Label>
-            <select
-              id="battle-folder"
-              value={folderId}
-              onChange={(event) => setFolderId(event.target.value)}
-              className="h-10 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-950 focus:ring-offset-2"
-            >
-              <option value="">Choose a folder...</option>
-              {folders.map((folder) => (
-                <option key={folder.id} value={folder.id}>
-                  {folder.name}
-                </option>
-              ))}
-            </select>
+            <Select value={folderId} onValueChange={setFolderId}>
+              <SelectTrigger id="battle-folder">
+                <SelectValue placeholder="Choose a folder..." />
+              </SelectTrigger>
+              <SelectContent>
+                {folders.map((folder) => (
+                  <SelectItem key={folder.id} value={folder.id}>
+                    {folder.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="battle-question-count">Questions</Label>
               <Input
@@ -138,28 +143,29 @@ export function BattleChallengeDialog({
 
             <div className="space-y-2">
               <Label htmlFor="battle-time-limit">Time limit</Label>
-              <select
-                id="battle-time-limit"
-                value={timeLimitSeconds}
-                onChange={(event) => setTimeLimitSeconds(event.target.value)}
-                className="h-10 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-950 focus:ring-offset-2"
-              >
-                {TIME_LIMIT_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              <Select value={timeLimitSeconds} onValueChange={setTimeLimitSeconds}>
+                <SelectTrigger id="battle-time-limit">
+                  <SelectValue placeholder="Choose a time limit..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIME_LIMIT_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={String(option.value)}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-zinc-200 px-5 py-4">
-          <Button variant="outline" onClick={onClose}>
+        <div className="flex flex-col gap-2 border-t border-zinc-200 px-5 py-4 sm:flex-row sm:justify-end">
+          <Button variant="outline" onClick={onClose} className="w-full sm:w-auto">
             Cancel
           </Button>
           <Button
             onClick={submit}
+            className="w-full sm:w-auto"
             disabled={
               isSubmitting ||
               !opponentProfileId ||

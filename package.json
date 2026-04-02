@@ -11,6 +11,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@radix-ui/react-select": "^2.2.6",
     "@radix-ui/react-tabs": "^1.1.13",
     "@supabase/supabase-js": "^2.99.2",
     "@tiptap/extension-placeholder": "^2.1.13",

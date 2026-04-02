@@ -47,6 +47,7 @@ export interface SidebarProps {
   onUploadClick: () => void
   onErrorHubClick: () => void
   onBattleClick?: () => void
+  activeRoute?: 'dashboard' | 'battle'
   isMobileOpen?: boolean
   onMobileClose?: () => void
   isDesktopCollapsed?: boolean
@@ -74,6 +75,7 @@ export function Sidebar({
   onUploadClick,
   onErrorHubClick,
   onBattleClick,
+  activeRoute = 'dashboard',
   isMobileOpen = false,
   onMobileClose,
   isDesktopCollapsed = false,
@@ -124,6 +126,8 @@ export function Sidebar({
     onBattleClick?.()
     onMobileClose?.()
   }
+
+  const isBattleActive = activeRoute === 'battle'
 
   return (
     <>
@@ -184,7 +188,7 @@ export function Sidebar({
             <Button
               onClick={handleBattleClickWithClose}
               className="w-full justify-start"
-              variant="outline"
+              variant={isBattleActive ? 'default' : 'outline'}
             >
               <Swords className="h-4 w-4 mr-2" />
               Battle

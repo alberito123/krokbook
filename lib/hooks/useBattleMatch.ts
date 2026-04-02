@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { resolveBattleMatchRefreshState } from '@/lib/battle/runtime'
+import { applyOptimisticBattleAnswer, resolveBattleMatchRefreshState } from '@/lib/battle/runtime'
 import type { BattleCurrentMatchState, BattleResultView } from '@/lib/battle/types'
 
 const MATCH_POLL_INTERVAL_MS = 2_000
@@ -44,7 +44,7 @@ export function useBattleMatch(isEnabled = true): BattleMatchHookState {
     setError(null)
   }, [])
 
-  const refreshMatch = React.useCallback(async () => {
+  const refreshMatchInternal = React.useCallback(async (options?: { silent?: boolean }) => {
     if (!isEnabled) {
       setMatchState(null)
       setResult(null)
@@ -53,7 +53,9 @@ export function useBattleMatch(isEnabled = true): BattleMatchHookState {
       return
     }
 
-    setIsLoading(true)
+    if (!options?.silent) {
+      setIsLoading(true)
+    }
     try {
       const data = await readJson<BattleCurrentMatchState>(
         await fetch('/api/battle/match/current', { credentials: 'include' })
@@ -94,22 +96,28 @@ export function useBattleMatch(isEnabled = true): BattleMatchHookState {
         throw nextError
       }
     } finally {
-      setIsLoading(false)
+      if (!options?.silent) {
+        setIsLoading(false)
+      }
     }
   }, [isEnabled, refreshResult])
+
+  const refreshMatch = React.useCallback(async () => {
+    await refreshMatchInternal()
+  }, [refreshMatchInternal])
 
   React.useEffect(() => {
     if (!isEnabled) return
 
-    refreshMatch().catch(() => undefined)
+    refreshMatchInternal().catch(() => undefined)
     const intervalId = window.setInterval(() => {
-      refreshMatch().catch(() => undefined)
+      refreshMatchInternal({ silent: true }).catch(() => undefined)
     }, MATCH_POLL_INTERVAL_MS)
 
     return () => {
       window.clearInterval(intervalId)
     }
-  }, [isEnabled, refreshMatch])
+  }, [isEnabled, refreshMatchInternal])
 
   const submitAnswer = React.useCallback(async (
     matchId: string,
@@ -127,11 +135,13 @@ export function useBattleMatch(isEnabled = true): BattleMatchHookState {
         })
       )
 
-      await refreshMatch()
+      setMatchState(previousState => applyOptimisticBattleAnswer(previousState, questionId))
+      setError(null)
+      refreshMatchInternal({ silent: true }).catch(() => undefined)
     } finally {
       setIsSubmittingAnswer(false)
     }
-  }, [refreshMatch])
+  }, [refreshMatchInternal])
 
   const clearResult = React.useCallback(() => {
     lastActiveMatchIdRef.current = null

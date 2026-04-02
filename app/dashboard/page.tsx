@@ -345,6 +345,7 @@ function DashboardPageInner() {
         onMenuClick={handleMenuToggle}
         isSidebarOpen={isSidebarOpen}
         onBattleClick={() => router.push('/battle')}
+        isBattleActive={false}
         isHeaderCollapsed={isHeaderCollapsed}
         onToggleHeader={() => setIsHeaderCollapsed(prev => !prev)}
       />
@@ -358,6 +359,7 @@ function DashboardPageInner() {
         onUploadClick={handleUploadClick}
         onErrorHubClick={handleErrorHubClick}
         onBattleClick={() => router.push('/battle')}
+        activeRoute="dashboard"
         isMobileOpen={isSidebarOpen}
         onMobileClose={handleSidebarClose}
         isDesktopCollapsed={isSidebarCollapsed}
